@@ -1,0 +1,2128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="HCC Chart">
+<link rel="manifest" href="manifest.json">
+<title>HCC Pitch Charting</title>
+<style>
+:root {
+  --navy:   #0d1b2a;
+  --orange: #e87722;
+  --white:  #f0f4f8;
+  --green:  #27ae60;
+  --red:    #e74c3c;
+  --yellow: #f39c12;
+  --blue:   #2980b9;
+  --gray:   #4a5568;
+  --light:  #8898aa;
+  --card:   #152436;
+  --border: #2d4060;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body { background: var(--navy); color: var(--white); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 16px; min-height: 100vh; overflow-x: hidden; }
+
+/* ── UTILITIES ──────────────────────────────────────────────────────────── */
+.hidden { display: none !important; }
+.divider { border: none; border-top: 1px solid var(--border); margin: 6px 12px; }
+
+/* ── FORMS ──────────────────────────────────────────────────────────────── */
+.form-group { margin-bottom: 12px; }
+label { display: block; font-size: 0.78rem; color: var(--light); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+input[type="text"], input[type="date"], input[type="number"], select {
+  width: 100%; background: var(--card); border: 1px solid var(--border);
+  color: var(--white); border-radius: 8px; padding: 11px 12px; font-size: 0.95rem;
+}
+input::placeholder { color: var(--light); }
+select option { background: var(--card); }
+
+/* ── BUTTONS ────────────────────────────────────────────────────────────── */
+.btn {
+  border: none; border-radius: 8px; padding: 14px 10px;
+  font-size: 0.9rem; font-weight: 700; cursor: pointer;
+  flex: 1; min-width: 56px; transition: transform 0.08s;
+  user-select: none; -webkit-user-select: none;
+}
+.btn:active { transform: scale(0.93); }
+.btn.selected { outline: 3px solid #fff; outline-offset: 2px; }
+
+.btn-orange { background: var(--orange); color: #fff; }
+.btn-green  { background: var(--green);  color: #fff; }
+.btn-red    { background: var(--red);    color: #fff; }
+.btn-yellow { background: var(--yellow); color: #000; }
+.btn-blue   { background: var(--blue);   color: #fff; }
+.btn-gray   { background: var(--gray);   color: #fff; }
+.btn-dark   { background: var(--border); color: var(--white); }
+.btn-ghost  { background: transparent; border: 1px solid var(--border); color: var(--light); }
+.btn-full   { width: 100%; padding: 15px; font-size: 1rem; border-radius: 10px; }
+.btn-sm     { padding: 9px 8px; font-size: 0.78rem; min-width: 44px; }
+
+.pitch-fb  { background: #c0392b; color: #fff; }
+.pitch-ct  { background: #8e44ad; color: #fff; }
+.pitch-sl  { background: var(--blue); color: #fff; }
+.pitch-cb  { background: var(--green); color: #fff; }
+.pitch-ch  { background: #e67e22; color: #fff; }
+.pitch-oth { background: #7f8c8d; color: #fff; }
+
+.btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ── SECTION ────────────────────────────────────────────────────────────── */
+.section { margin: 6px 12px; }
+.sec-label { font-size: 0.68rem; color: var(--light); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 5px; }
+
+/* ── HEADER ─────────────────────────────────────────────────────────────── */
+#header {
+  background: var(--card); border-bottom: 2px solid var(--orange);
+  padding: 8px 12px; display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+}
+.hdr-title { font-size: 0.85rem; font-weight: 700; color: var(--orange); }
+.hdr-game  { font-size: 0.72rem; color: var(--light); }
+
+/* ── SCOREBOARD ─────────────────────────────────────────────────────────── */
+#scoreboard {
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 8px 12px; margin: 8px 12px;
+  display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto;
+  gap: 4px; align-items: center;
+}
+.sb-cell { text-align: center; }
+.sb-label { font-size: 0.62rem; color: var(--light); text-transform: uppercase; }
+.sb-val   { font-size: 1.5rem; font-weight: 800; color: var(--orange); line-height: 1.1; }
+.sb-val.danger { color: var(--red); }
+.count-display { font-size: 1.4rem; font-weight: 700; color: var(--white); }
+
+/* ── DIAMOND ────────────────────────────────────────────────────────────── */
+.diamond-wrap { display: flex; flex-direction: column; align-items: center; padding: 4px; }
+.diamond-row { display: flex; gap: 4px; margin: 1px 0; }
+.base {
+  width: 18px; height: 18px; transform: rotate(45deg);
+  border: 2px solid var(--light); background: transparent; border-radius: 2px;
+}
+.base.on { background: var(--orange); border-color: var(--orange); }
+.base-home { width: 14px; height: 14px; background: var(--border); clip-path: polygon(50% 0%,100% 50%,100% 100%,0% 100%,0% 50%); margin-top: 4px; border-radius: 0; transform: none; border: none; }
+
+/* ── PITCHER BAR ─────────────────────────────────────────────────────────── */
+#pitcher-bar {
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 12px; margin: 4px 12px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.pitcher-name { font-size: 1rem; font-weight: 700; color: var(--white); }
+.pitcher-sub  { font-size: 0.72rem; color: var(--light); margin-top: 1px; }
+.btn-change   { font-size: 0.78rem; padding: 7px 12px; flex: 0 0 auto; }
+
+/* ── BATTER HAND ─────────────────────────────────────────────────────────── */
+#batter-bar {
+  margin: 4px 12px; padding: 7px 10px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  display: flex; align-items: center; gap: 10px;
+}
+.batter-label { font-size: 0.72rem; color: var(--light); text-transform: uppercase; white-space: nowrap; }
+.btn-hand { min-width: 70px; padding: 10px; font-size: 1rem; flex: 0 0 auto; }
+.pa-info   { font-size: 0.72rem; color: var(--light); margin-left: auto; }
+
+/* ── PITCH TYPE ──────────────────────────────────────────────────────────── */
+#pitch-type-row .btn { font-size: 0.95rem; padding: 16px 8px; }
+
+/* ── ZONE GRID ───────────────────────────────────────────────────────────── */
+.zone-wrap { display: flex; gap: 12px; align-items: flex-start; }
+.zone-toggle { cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center; }
+.zone-toggle:active { opacity: 0.7; }
+#zone-toggle-icon { color: #5a6a7a; font-size: 0.85rem; }
+.zone-grid {
+  display: grid;
+  grid-template-columns: 38px 44px 44px 44px 38px;
+  grid-template-rows:    32px 44px 44px 44px 32px;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.zc {
+  border: 1px solid var(--border); border-radius: 4px; display: flex;
+  align-items: center; justify-content: center; font-size: 0.8rem;
+  font-weight: 600; cursor: pointer; transition: all 0.08s; user-select: none;
+}
+.zc:active { transform: scale(0.9); }
+.zc.in-zone  { background: #1e3250; color: var(--light); }
+.zc.chase    { background: #162030; color: #5a6a7a; font-size: 0.65rem; }
+.zc.empty    { background: transparent; border: none; cursor: default; }
+.zc.z-sel    { background: var(--orange); color: #fff; border-color: var(--orange); }
+.vel-wrap    { display: flex; flex-direction: column; gap: 8px; }
+.vel-select  { width: 80px; text-align: center; font-size: 1.15rem; font-weight: 700;
+               padding: 11px 4px; background: #1a2a3a; border: 1px solid #2a3a4a;
+               border-radius: 6px; color: var(--white); cursor: pointer; }
+.base-lg { width: 42px; height: 42px; transform: rotate(45deg); border: 3px solid var(--light);
+           background: transparent; border-radius: 4px; cursor: pointer; flex-shrink: 0; }
+.base-lg.on { background: var(--orange); border-color: var(--orange); }
+.base-lg:active { opacity: 0.7; }
+
+/* ── RESULT BUTTONS ──────────────────────────────────────────────────────── */
+#result-row .btn { padding: 16px 6px; font-size: 0.82rem; }
+
+/* ── CONTACT / OUTCOME ───────────────────────────────────────────────────── */
+#contact-row .btn, #outcome-row .btn { padding: 15px 7px; font-size: 0.82rem; }
+
+
+/* ── ACTION BAR ──────────────────────────────────────────────────────────── */
+#action-bar {
+  display: flex; gap: 8px; padding: 8px 12px;
+  position: sticky; bottom: 0; background: var(--navy);
+  border-top: 1px solid var(--border); z-index: 90;
+}
+#btn-log { flex: 2; font-size: 1rem; padding: 16px; }
+#btn-undo, #btn-override { flex: 1; padding: 16px; font-size: 0.85rem; }
+
+/* ── RECENT PITCHES ───────────────────────────────────────────────────────── */
+#pitch-log { max-height: 150px; overflow-y: auto; margin: 0 12px; }
+.pitch-row {
+  display: flex; gap: 5px; align-items: center;
+  font-size: 0.75rem; padding: 5px 8px; border-radius: 6px;
+  margin-bottom: 3px; background: var(--card); border: 1px solid var(--border);
+}
+.pbadge { padding: 2px 7px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; color: #fff; }
+.pbadge.FB { background: #c0392b; } .pbadge.CT { background: #8e44ad; }
+.pbadge.SL { background: #2980b9; } .pbadge.CB { background: #27ae60; }
+.pbadge.CH { background: #e67e22; } .pbadge.OTH{ background: #7f8c8d; }
+.pill { padding: 2px 7px; border-radius: 10px; background: var(--border); font-size: 0.7rem; }
+.pill.green { background: var(--green); }
+.pill.red   { background: var(--red);   }
+.pill.yellow{ background: var(--yellow); color: #000; }
+
+/* ── MODAL ────────────────────────────────────────────────────────────────── */
+.overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+  z-index: 200; display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.modal {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 14px; padding: 20px; width: 100%; max-width: 400px;
+}
+.modal h2 { color: var(--orange); margin-bottom: 14px; font-size: 1rem; text-transform: uppercase; }
+.modal .form-group { margin-bottom: 10px; }
+.modal-footer { margin-top: 14px; display: flex; gap: 8px; }
+
+/* ── SETUP SCREEN ─────────────────────────────────────────────────────────── */
+#setup-screen { padding: 20px; max-width: 480px; margin: 0 auto; }
+#setup-screen h1 { font-size: 1.3rem; color: var(--orange); margin-bottom: 4px; }
+#setup-screen p  { font-size: 0.82rem; color: var(--light); margin-bottom: 18px; }
+
+/* ── GAME LIST ────────────────────────────────────────────────────────────── */
+#game-list-screen { padding: 16px; }
+#game-list-screen h1 { font-size: 1.1rem; color: var(--orange); margin-bottom: 14px; }
+.game-item {
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; margin-bottom: 8px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.game-item .gi-info { font-size: 0.85rem; }
+.game-item .gi-sub  { font-size: 0.72rem; color: var(--light); margin-top: 2px; }
+.game-actions { display: flex; gap: 6px; }
+
+/* ── MODE SELECT ──────────────────────────────────────────────────────────── */
+#mode-select-screen {
+  min-height: 100vh; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; padding: 30px 20px;
+}
+.mode-logo  { font-size: 2.4rem; margin-bottom: 6px; }
+.mode-title { font-size: 1.5rem; font-weight: 800; color: var(--orange); margin-bottom: 4px; }
+.mode-sub   { font-size: 0.82rem; color: var(--light); margin-bottom: 38px; text-align: center; }
+.mode-btn {
+  width: 100%; max-width: 360px; padding: 20px 18px; margin-bottom: 14px;
+  border-radius: 14px; border: 2px solid var(--border);
+  background: var(--card); color: var(--white);
+  cursor: pointer; text-align: left; transition: border-color 0.15s;
+}
+.mode-btn:active { transform: scale(0.97); }
+.mode-btn.primary   { border-color: var(--orange); }
+.mode-btn.secondary { border-color: var(--blue); }
+.mode-btn .mb-icon  { font-size: 1.5rem; display: block; margin-bottom: 4px; }
+.mode-btn .mb-label { font-size: 1.05rem; font-weight: 700; display: block; }
+.mode-btn .mb-sub   { font-size: 0.75rem; color: var(--light); display: block; margin-top: 3px; }
+
+/* ── SESSION SETUP ────────────────────────────────────────────────────────── */
+#session-setup-screen { padding: 20px; max-width: 480px; margin: 0 auto; }
+#session-setup-screen h1 { font-size: 1.2rem; color: var(--blue); margin-bottom: 4px; }
+#session-setup-screen p  { font-size: 0.82rem; color: var(--light); margin-bottom: 20px; }
+
+/* ── SESSION CHART ────────────────────────────────────────────────────────── */
+#session-chart-screen { padding-bottom: 90px; }
+#ses-header {
+  background: var(--card); border-bottom: 2px solid var(--blue);
+  padding: 8px 12px; display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+}
+.ses-hdr-title { font-size: 0.85rem; font-weight: 700; color: #5ba3d0; }
+.ses-hdr-sub   { font-size: 0.72rem; color: var(--light); }
+#ses-stats-bar {
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 8px 12px; margin: 8px 12px;
+  display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 4px;
+}
+#ses-action-bar {
+  display: flex; gap: 8px; padding: 8px 12px;
+  position: sticky; bottom: 0; background: var(--navy);
+  border-top: 1px solid var(--border); z-index: 90;
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!--  MODE SELECT                                                     -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="mode-select-screen">
+  <div class="mode-logo">⚾</div>
+  <div class="mode-title">HCC Pitch Charting</div>
+  <div class="mode-sub">Cougars Fall 2026 · Select charting mode</div>
+
+  <button class="mode-btn primary" onclick="showSetup()">
+    <span class="mb-icon">⚔</span>
+    <span class="mb-label">GAME</span>
+    <span class="mb-sub">Chart a live game with counts, runners, and outcomes</span>
+  </button>
+
+  <button class="mode-btn secondary" onclick="showSessionSetup()">
+    <span class="mb-icon">🏟</span>
+    <span class="mb-label">BULLPEN / SIDE SESSION</span>
+    <span class="mb-sub">Track bullpen, side sessions, or live BP (no count management)</span>
+  </button>
+
+  <button class="mode-btn" onclick="showGameList()" style="margin-top:6px;border-color:#4a5568;">
+    <span class="mb-icon">📂</span>
+    <span class="mb-label">LOAD SAVED</span>
+    <span class="mb-sub">Resume a game or session, or export saved data</span>
+  </button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!--  SESSION SETUP SCREEN                                           -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="session-setup-screen" class="hidden">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+    <button class="btn btn-ghost btn-sm" onclick="showModeSelect()">← Back</button>
+    <h1 style="margin:0;">Bullpen / Side Session</h1>
+  </div>
+
+  <div class="form-group">
+    <label>Date</label>
+    <input type="date" id="ses-date">
+  </div>
+  <div class="form-group">
+    <label>Pitcher</label>
+    <select id="ses-pitcher">
+      <option value="">— Select Pitcher —</option>
+    </select>
+  </div>
+  <div class="form-group">
+    <label>Session Type</label>
+    <select id="ses-type">
+      <option value="Side">Side Session</option>
+      <option value="Pen">Bullpen</option>
+      <option value="Live BP">Live BP</option>
+      <option value="Sim Game">Sim Game</option>
+    </select>
+  </div>
+  <div class="form-group">
+    <label>Notes (optional)</label>
+    <input type="text" id="ses-notes" placeholder="e.g. working on CB command">
+  </div>
+
+  <button class="btn btn-blue btn-full" onclick="startSession()">Start Session</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!--  SESSION CHARTING SCREEN                                         -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="session-chart-screen" class="hidden">
+
+  <!-- SESSION HEADER -->
+  <div id="ses-header">
+    <div>
+      <div class="ses-hdr-title">BULLPEN SESSION</div>
+      <div class="ses-hdr-sub" id="ses-hdr-info">—</div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-ghost btn-sm" onclick="showGameList()">Saved</button>
+      <button class="btn btn-blue btn-sm" onclick="exportSession()">Export</button>
+    </div>
+  </div>
+
+  <!-- STATS BAR -->
+  <div id="ses-stats-bar">
+    <div class="sb-cell"><div class="sb-label">Pitches</div><div class="sb-val" id="ses-sb-pitches">0</div></div>
+    <div class="sb-cell"><div class="sb-label">Strikes</div><div class="sb-val" id="ses-sb-strikes">0</div></div>
+    <div class="sb-cell"><div class="sb-label">Balls</div><div class="sb-val" id="ses-sb-balls">0</div></div>
+    <div class="sb-cell"><div class="sb-label">Strike%</div><div class="sb-val" id="ses-sb-pct">—</div></div>
+  </div>
+
+  <!-- PITCH TYPE -->
+  <div class="section">
+    <div class="sec-label">Pitch Type</div>
+    <div class="btn-row" id="ses-pitch-type-row">
+      <button class="btn pitch-fb" onclick="sesSelectPitch('FB')">FB</button>
+      <button class="btn pitch-ct" onclick="sesSelectPitch('CT')">CT</button>
+      <button class="btn pitch-sl" onclick="sesSelectPitch('SL')">SL</button>
+      <button class="btn pitch-cb" onclick="sesSelectPitch('CB')">CB</button>
+      <button class="btn pitch-ch" onclick="sesSelectPitch('CH')">CH</button>
+      <button class="btn pitch-oth" onclick="sesSelectPitch('OTH')">OTH</button>
+    </div>
+  </div>
+
+  <!-- ZONE + VELOCITY -->
+  <div class="section">
+    <div class="sec-label">Zone & Velocity</div>
+    <div class="zone-wrap">
+      <div class="zone-grid" id="ses-zone-grid">
+        <!-- row 0: empty, HIGH, HIGH, HIGH, empty -->
+        <div class="zc empty"></div>
+        <div class="zc chase" id="sz11a" onclick="sesSelectZone(11)">HIGH</div>
+        <div class="zc chase" id="sz11b" onclick="sesSelectZone(11)"></div>
+        <div class="zc chase" id="sz11c" onclick="sesSelectZone(11)"></div>
+        <div class="zc empty"></div>
+        <!-- row 1 -->
+        <div class="zc chase" id="sz13a" onclick="sesSelectZone(13)">IN</div>
+        <div class="zc in-zone" id="sz1" onclick="sesSelectZone(1)">1</div>
+        <div class="zc in-zone" id="sz2" onclick="sesSelectZone(2)">2</div>
+        <div class="zc in-zone" id="sz3" onclick="sesSelectZone(3)">3</div>
+        <div class="zc chase" id="sz14a" onclick="sesSelectZone(14)">AWAY</div>
+        <!-- row 2 -->
+        <div class="zc chase" id="sz13b" onclick="sesSelectZone(13)"></div>
+        <div class="zc in-zone" id="sz4" onclick="sesSelectZone(4)">4</div>
+        <div class="zc in-zone" id="sz5" onclick="sesSelectZone(5)">5</div>
+        <div class="zc in-zone" id="sz6" onclick="sesSelectZone(6)">6</div>
+        <div class="zc chase" id="sz14b" onclick="sesSelectZone(14)"></div>
+        <!-- row 3 -->
+        <div class="zc chase" id="sz13c" onclick="sesSelectZone(13)"></div>
+        <div class="zc in-zone" id="sz7" onclick="sesSelectZone(7)">7</div>
+        <div class="zc in-zone" id="sz8" onclick="sesSelectZone(8)">8</div>
+        <div class="zc in-zone" id="sz9" onclick="sesSelectZone(9)">9</div>
+        <div class="zc chase" id="sz14c" onclick="sesSelectZone(14)"></div>
+        <!-- row 4: empty, LOW, LOW, LOW, empty -->
+        <div class="zc empty"></div>
+        <div class="zc chase" id="sz12a" onclick="sesSelectZone(12)">LOW</div>
+        <div class="zc chase" id="sz12b" onclick="sesSelectZone(12)"></div>
+        <div class="zc chase" id="sz12c" onclick="sesSelectZone(12)"></div>
+        <div class="zc empty"></div>
+      </div>
+      <!-- Velocity -->
+      <div class="vel-wrap">
+        <div class="sec-label">Velo</div>
+        <select class="vel-select" id="ses-vel-select"></select>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESULT -->
+  <div class="section">
+    <div class="sec-label">Result</div>
+    <div class="btn-row" id="ses-result-row">
+      <button class="btn btn-green" onclick="sesLogPitch('Called Strike')">Called K</button>
+      <button class="btn btn-red"   onclick="sesLogPitch('Swing Strike')">Swing K</button>
+      <button class="btn btn-yellow" onclick="sesLogPitch('Foul')">Foul</button>
+      <button class="btn btn-gray"  onclick="sesLogPitch('Ball')">Ball</button>
+      <button class="btn btn-blue"  onclick="sesLogPitch('In Play')">In Play</button>
+    </div>
+  </div>
+
+  <!-- RECENT PITCHES -->
+  <div class="section">
+    <div class="sec-label">Recent Pitches</div>
+    <div id="ses-pitch-log"></div>
+  </div>
+
+  <!-- ACTION BAR -->
+  <div id="ses-action-bar">
+    <button class="btn btn-ghost" style="flex:1;" onclick="sesUndo()">↩ Undo</button>
+    <button class="btn btn-blue btn-full" style="flex:2;" onclick="exportSession()">⬇ Export Session</button>
+    <button class="btn btn-ghost" style="flex:1;" onclick="showModeSelect()">✕ End</button>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!--  SETUP SCREEN                                                   -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="setup-screen" class="hidden">
+  <h1>⚾ HCC Pitch Charting</h1>
+  <p>Cougars Fall 2026 · Offline-first · AirDrop to sync</p>
+
+  <div class="form-group">
+    <label>Opponent</label>
+    <input type="text" id="setup-opponent" placeholder="e.g. Rock Valley College">
+  </div>
+  <div class="form-group">
+    <label>Date</label>
+    <input type="date" id="setup-date">
+  </div>
+  <div class="form-group">
+    <label>Location</label>
+    <select id="setup-location">
+      <option value="home">Home</option>
+      <option value="away">Away</option>
+      <option value="neutral">Neutral</option>
+    </select>
+  </div>
+
+  <button class="btn btn-orange btn-full" onclick="startGame()">Start Charting</button>
+
+  <hr class="divider" style="margin:20px 0">
+  <button class="btn btn-dark btn-full" onclick="showGameList()">📂 Load / Resume Game</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!--  GAME LIST SCREEN                                               -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="game-list-screen" class="hidden">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+    <button class="btn btn-ghost btn-sm" onclick="showModeSelect()">← Back</button>
+    <h1 style="margin:0;">Saved Games &amp; Sessions</h1>
+  </div>
+  <div id="game-list-items"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!--  MAIN CHARTING SCREEN                                           -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="main-screen" class="hidden">
+
+  <!-- HEADER -->
+  <div id="header">
+    <div>
+      <div class="hdr-title">HCC Cougars</div>
+      <div class="hdr-game" id="hdr-game-info">—</div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-ghost btn-sm" onclick="showGameList()">Games</button>
+      <button class="btn btn-red btn-sm" onclick="exportGame()">Export</button>
+    </div>
+  </div>
+
+  <!-- SCOREBOARD -->
+  <div id="scoreboard">
+    <div class="sb-cell">
+      <div class="sb-label">Inning</div>
+      <div class="sb-val" id="sb-inning">1</div>
+    </div>
+    <div class="sb-cell">
+      <div class="sb-label">Outs</div>
+      <div class="sb-val" id="sb-outs">0</div>
+    </div>
+    <div class="sb-cell">
+      <div class="sb-label">Runs</div>
+      <div class="sb-val" id="sb-runs">0</div>
+    </div>
+    <div class="sb-cell">
+      <div class="sb-label">Count</div>
+      <div class="count-display" id="sb-count">0-0</div>
+    </div>
+    <div class="sb-cell">
+      <div class="sb-label">Pitches</div>
+      <div class="sb-val" id="sb-pitches">0</div>
+    </div>
+    <!-- Diamond -->
+    <div class="diamond-wrap">
+      <div class="diamond-row" style="justify-content:center;">
+        <div class="base" id="base-2b"></div>
+      </div>
+      <div class="diamond-row">
+        <div class="base" id="base-3b"></div>
+        <div style="width:26px;"></div>
+        <div class="base" id="base-1b"></div>
+      </div>
+      <div class="diamond-row" style="justify-content:center;">
+        <div class="base-home"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PITCHER BAR -->
+  <div id="pitcher-bar">
+    <div>
+      <div class="pitcher-name" id="pitcher-name">— No Pitcher —</div>
+      <div class="pitcher-sub"  id="pitcher-sub">Select pitcher to start</div>
+    </div>
+    <button class="btn btn-dark btn-change" onclick="openPitcherModal()">
+      Change Pitcher
+    </button>
+  </div>
+
+  <!-- BATTER HAND -->
+  <div id="batter-bar">
+    <span class="batter-label">Batter:</span>
+    <button class="btn btn-blue btn-hand" id="btn-lhh" onclick="setBatterHand('L')">LHH</button>
+    <button class="btn btn-red  btn-hand" id="btn-rhh" onclick="setBatterHand('R')">RHH</button>
+    <span class="pa-info" id="pa-info">PA#0 · Pitch#0</span>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- PITCH TYPE -->
+  <div class="section">
+    <div class="sec-label">Pitch Type</div>
+    <div class="btn-row" id="pitch-type-row">
+      <button class="btn pitch-fb" onclick="setPitchType('FB')">FB</button>
+      <button class="btn pitch-ct" onclick="setPitchType('CT')">CT</button>
+      <button class="btn pitch-sl" onclick="setPitchType('SL')">SL</button>
+      <button class="btn pitch-cb" onclick="setPitchType('CB')">CB</button>
+      <button class="btn pitch-ch" onclick="setPitchType('CH')">CH</button>
+      <button class="btn pitch-oth" onclick="setPitchType('OTH')">OTH</button>
+    </div>
+  </div>
+
+  <!-- ZONE + VELOCITY -->
+  <div class="section">
+    <div class="sec-label">Location <span style="color:#4a5568;">(required)</span> &amp; Velocity <span style="color:#4a5568;">(optional)</span></div>
+    <div class="zone-wrap">
+      <!-- Zone grid: catcher's view, RHH perspective -->
+      <!-- Cols: [inside] [1][2][3] [away]   Rows: [high] [in-zone x3] [low] -->
+      <div class="zone-grid" id="zone-grid">
+        <div class="zc empty"   style="grid-column:1;grid-row:1;"></div>
+        <div class="zc chase"   data-zone="11" style="grid-column:2/5;grid-row:1;" onclick="setZone(11)">HIGH</div>
+        <div class="zc empty"   style="grid-column:5;grid-row:1;"></div>
+        <div class="zc chase"   data-zone="13" style="grid-column:1;grid-row:2/5;" onclick="setZone(13)">IN</div>
+        <div class="zc in-zone" data-zone="1"  style="grid-column:2;grid-row:2;" onclick="setZone(1)"></div>
+        <div class="zc in-zone" data-zone="2"  style="grid-column:3;grid-row:2;" onclick="setZone(2)"></div>
+        <div class="zc in-zone" data-zone="3"  style="grid-column:4;grid-row:2;" onclick="setZone(3)"></div>
+        <div class="zc chase"   data-zone="14" style="grid-column:5;grid-row:2/5;" onclick="setZone(14)">AWAY</div>
+        <div class="zc in-zone" data-zone="4"  style="grid-column:2;grid-row:3;" onclick="setZone(4)"></div>
+        <div class="zc in-zone" data-zone="5"  style="grid-column:3;grid-row:3;" onclick="setZone(5)"></div>
+        <div class="zc in-zone" data-zone="6"  style="grid-column:4;grid-row:3;" onclick="setZone(6)"></div>
+        <div class="zc in-zone" data-zone="7"  style="grid-column:2;grid-row:4;" onclick="setZone(7)"></div>
+        <div class="zc in-zone" data-zone="8"  style="grid-column:3;grid-row:4;" onclick="setZone(8)"></div>
+        <div class="zc in-zone" data-zone="9"  style="grid-column:4;grid-row:4;" onclick="setZone(9)"></div>
+        <div class="zc empty"   style="grid-column:1;grid-row:5;"></div>
+        <div class="zc chase"   data-zone="12" style="grid-column:2/5;grid-row:5;" onclick="setZone(12)">LOW</div>
+        <div class="zc empty"   style="grid-column:5;grid-row:5;"></div>
+      </div>
+      <div class="vel-wrap">
+        <div class="sec-label" style="margin-bottom:6px;">MPH</div>
+        <select id="vel-select" class="vel-select" onchange="setVelFromSelect(this.value)">
+          <option value="">—</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="clearZoneVel()" style="margin-top:4px;text-align:center;">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- RESULT -->
+  <div class="section">
+    <div class="sec-label">Pitch Result</div>
+    <div class="btn-row" id="result-row">
+      <button class="btn btn-dark" onclick="setResult('Ball')">Ball</button>
+      <button class="btn btn-yellow" onclick="setResult('Called Strike')">K-Called</button>
+      <button class="btn btn-orange" onclick="setResult('Swing Strike')">K-Swing</button>
+      <button class="btn btn-gray" onclick="setResult('Foul')">Foul</button>
+      <button class="btn btn-green" onclick="setResult('In Play')">In Play</button>
+    </div>
+    <div class="btn-row" id="result-row-2" style="margin-top:6px;">
+      <button class="btn btn-red btn-sm" onclick="setResult('HBP')">HBP</button>
+      <button class="btn btn-dark btn-sm" onclick="setResult('WP')">WP</button>
+      <button class="btn btn-dark btn-sm" onclick="setResult('PB')">PB</button>
+    </div>
+  </div>
+
+  <!-- CONTACT (shows when In Play) -->
+  <div class="section hidden" id="contact-section">
+    <div class="sec-label">Contact Type</div>
+    <div class="btn-row" id="contact-row">
+      <button class="btn btn-gray" onclick="setContact('GB')">GB</button>
+      <button class="btn btn-gray" onclick="setContact('LD')">LD</button>
+      <button class="btn btn-gray" onclick="setContact('FB')">Fly</button>
+      <button class="btn btn-gray" onclick="setContact('PU')">Pop</button>
+      <button class="btn btn-dark" data-contact="BUNT" onclick="setContact('BUNT')">Bunt</button>
+    </div>
+  </div>
+
+  <!-- OUTCOME (shows when contact selected) -->
+  <div class="section hidden" id="outcome-section">
+    <div class="sec-label">PA Outcome</div>
+    <div class="btn-row" id="outcome-row">
+      <button class="btn btn-gray" onclick="setOutcome('out')">Out</button>
+      <button class="btn btn-green" onclick="setOutcome('1B')">1B</button>
+      <button class="btn btn-green" onclick="setOutcome('2B')">2B</button>
+      <button class="btn btn-green" onclick="setOutcome('3B')">3B</button>
+      <button class="btn btn-orange" onclick="setOutcome('HR')">HR</button>
+      <button class="btn btn-red" onclick="setOutcome('E')">Error</button>
+    </div>
+    <div class="btn-row" id="outcome-row-2" style="margin-top:6px;">
+      <button class="btn btn-dark btn-sm" onclick="setOutcome('FC')">FC</button>
+      <button class="btn btn-dark btn-sm" onclick="setOutcome('SAC')">SAC</button>
+      <button class="btn btn-red  btn-sm" id="btn-dp" onclick="setOutcome('DP')">DP</button>
+    </div>
+  </div>
+
+  <!-- SB / CS / RUN STRIP -->
+  <div class="section" style="margin-top:4px;">
+    <div class="btn-row">
+      <button class="btn btn-dark btn-sm" onclick="logSB(true)">SB ✓</button>
+      <button class="btn btn-red  btn-sm" onclick="logSB(false)">CS/Pickoff</button>
+      <button class="btn btn-orange btn-sm" onclick="addRun()">+ Run</button>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- RECENT PITCHES -->
+  <div class="section">
+    <div class="sec-label">Last 6 Pitches</div>
+    <div id="pitch-log"></div>
+  </div>
+
+  <!-- ACTION BAR -->
+  <div id="action-bar">
+    <button class="btn btn-ghost" id="btn-undo"     onclick="undoLastPitch()">↩ Undo</button>
+    <button class="btn btn-orange" id="btn-log"     onclick="logPitch()">LOG PITCH</button>
+    <button class="btn btn-dark"  id="btn-override" onclick="openOverrideModal()">⚙ Override</button>
+  </div>
+
+</div><!-- /main-screen -->
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!--  PITCHER CHANGE MODAL                                           -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="pitcher-modal" class="overlay hidden">
+  <div class="modal">
+    <h2>Pitcher Change</h2>
+    <div class="form-group">
+      <label>Pitcher Name</label>
+      <select id="pm-name"></select>
+    </div>
+    <div class="form-group">
+      <label>Inherited Runners</label>
+      <input type="number" id="pm-ir" min="0" max="3" value="0">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-orange" style="flex:2;" onclick="confirmPitcherChange()">Confirm</button>
+      <button class="btn btn-ghost"  style="flex:1;" onclick="closePitcherModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!--  OVERRIDE MODAL                                                 -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="override-modal" class="overlay hidden">
+  <div class="modal">
+    <h2>⚙ Manual Override</h2>
+    <div class="btn-row" style="flex-direction:column;gap:8px;">
+      <button class="btn btn-yellow btn-full" onclick="ovEndInning()">End Inning (3 outs now)</button>
+      <button class="btn btn-green  btn-full" onclick="ovAddRunner()">Add Runner to Base</button>
+      <button class="btn btn-red    btn-full" onclick="ovRemoveRunner()">Remove Runner from Base</button>
+      <button class="btn btn-gray   btn-full" onclick="ovAddOut()">Add Out (+1 out)</button>
+      <button class="btn btn-dark   btn-full" onclick="ovSkipBatter()">Skip Batter (end PA, no count change)</button>
+      <button class="btn btn-ghost  btn-full" onclick="closeOverrideModal()">Cancel</button>
+      <div style="border-top:1px solid #2a3a4a;margin-top:4px;padding-top:8px;">
+        <button class="btn btn-red btn-full" onclick="endGame()">End Game &amp; Export</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- New Batter Modal (PA flash + hand select) -->
+<div id="new-batter-modal" class="overlay hidden">
+  <div class="modal" style="text-align:center;">
+    <div id="nb-result-wrap" style="background:#0e2a1a;border:1px solid #2ecc71;border-radius:8px;padding:12px 16px;margin-bottom:14px;">
+      <div id="nb-result-text" style="font-size:1.4rem;font-weight:800;color:#2ecc71;letter-spacing:0.05em;"></div>
+    </div>
+    <div style="font-size:0.75rem;color:#5a7a8a;margin-bottom:12px;" id="nb-context"></div>
+    <div style="font-size:0.9rem;font-weight:600;color:#c8d8e8;margin-bottom:18px;">Who's up?</div>
+    <div style="display:flex;gap:16px;">
+      <button class="btn btn-blue" style="flex:1;padding:28px 0;font-size:1.8rem;font-weight:800;" onclick="selectNewBatter('L')">L</button>
+      <button class="btn btn-red"  style="flex:1;padding:28px 0;font-size:1.8rem;font-weight:800;" onclick="selectNewBatter('R')">R</button>
+    </div>
+  </div>
+</div>
+
+<!-- Runner Placement Modal -->
+<div id="runner-modal" class="overlay hidden">
+  <div class="modal">
+    <h2 id="runner-modal-title">After the Play</h2>
+    <div style="margin-bottom:18px;">
+      <div class="sec-label">Runs Scored</div>
+      <div style="display:flex;align-items:center;gap:16px;margin-top:10px;">
+        <button class="btn btn-ghost" style="padding:14px 24px;font-size:1.4rem;" onclick="adjustRunModal(-1)">−</button>
+        <div id="run-modal-count" style="min-width:52px;text-align:center;font-size:2.2rem;font-weight:800;color:var(--orange);">0</div>
+        <button class="btn btn-ghost" style="padding:14px 24px;font-size:1.4rem;" onclick="adjustRunModal(+1)">+</button>
+      </div>
+    </div>
+    <div style="margin-bottom:20px;">
+      <div class="sec-label">Runners After Play — tap to toggle</div>
+      <div class="diamond-wrap" style="margin-top:16px;gap:2px;">
+        <div class="diamond-row" style="justify-content:center;">
+          <div class="base-lg" id="rm-2b" onclick="toggleRunnerBase(1)"></div>
+        </div>
+        <div class="diamond-row" style="gap:24px;margin:6px 0;">
+          <div class="base-lg" id="rm-3b" onclick="toggleRunnerBase(2)"></div>
+          <div style="width:20px;"></div>
+          <div class="base-lg" id="rm-1b" onclick="toggleRunnerBase(0)"></div>
+        </div>
+        <div class="diamond-row" style="justify-content:center;">
+          <div class="base-home" style="width:22px;height:22px;margin-top:6px;"></div>
+        </div>
+      </div>
+    </div>
+    <button class="btn btn-orange btn-full" onclick="confirmRunnerModal()">Confirm</button>
+  </div>
+</div>
+
+<!-- Add Runner Sub-modal -->
+<div id="add-runner-modal" class="overlay hidden">
+  <div class="modal">
+    <h2>Add Runner</h2>
+    <div class="btn-row" style="flex-direction:column;gap:8px;">
+      <button class="btn btn-green btn-full" onclick="addRunnerTo(0)">Runner to 1st Base</button>
+      <button class="btn btn-green btn-full" onclick="addRunnerTo(1)">Runner to 2nd Base</button>
+      <button class="btn btn-green btn-full" onclick="addRunnerTo(2)">Runner to 3rd Base</button>
+      <button class="btn btn-ghost btn-full" onclick="closeAddRunnerModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Remove Runner Sub-modal -->
+<div id="remove-runner-modal" class="overlay hidden">
+  <div class="modal">
+    <h2>Remove Runner</h2>
+    <div class="btn-row" style="flex-direction:column;gap:8px;">
+      <button class="btn btn-red btn-full" onclick="removeRunnerFrom(0)">Remove from 1st Base</button>
+      <button class="btn btn-red btn-full" onclick="removeRunnerFrom(1)">Remove from 2nd Base</button>
+      <button class="btn btn-red btn-full" onclick="removeRunnerFrom(2)">Remove from 3rd Base</button>
+      <button class="btn btn-ghost btn-full" onclick="closeRemoveRunnerModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+//  GAME STATE
+// ═══════════════════════════════════════════════════════════════════════════
+
+const ROSTER = [
+  "A. Seepersaud","B. Greenfield","B. Keeney","C. Ford",
+  "M. Villafuerte","J. Perkowski","K. Parker","C. Weegans",
+  "C. Hathaway","B. Dospel","R. Buttita","B. Wiersema",
+  "J. Habel","A. Cassatta","M. Owen","A. Katz",
+  "P. Verzin","J. Uscenga","M. Zylstra","K. Fielder",
+  "A. Loney","J. Hansen","G. Last","G. Kanters",
+];
+
+let state = newGameState();
+
+function newGameState() {
+  return {
+    gameId:     null,
+    opponent:   '',
+    date:       '',
+    location:   'home',
+    // In-game
+    inning:     1,
+    outs:       0,
+    balls:      0,
+    strikes:    0,
+    runners:    [false, false, false],  // [1B, 2B, 3B]
+    isLeadoff:  true,
+    pitchNumGame: 0,
+    paId:       0,
+    pitchNumPA: 0,
+    // Current pitcher
+    pitcher:    null,
+    pitcherPitchCount: 0,
+    inheritedRunners: 0,
+    inheritedRunsScored: 0,
+    remainingInherited: 0,
+    // Current pitch selections
+    batterHand: null,
+    selPitchType: null,
+    selZone:    null,
+    velocity:   null,
+    selResult:  null,
+    selContact: null,
+    selOutcome: null,
+    // Tracking flags
+    twoStrikeReachedThisPA: false,
+    twoStrikeCountWasZeroTwo: false,
+    // Run tracking
+    runsAllowed: 0,
+    // All logged pitches
+    pitches:    [],
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  INDEXEDDB — GAME STORAGE
+// ═══════════════════════════════════════════════════════════════════════════
+
+let db;
+const DB_NAME  = 'hcc_charting';
+const DB_VER   = 1;
+const STORE    = 'games';
+
+function openDB() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(DB_NAME, DB_VER);
+    req.onupgradeneeded = e => {
+      e.target.result.createObjectStore(STORE, { keyPath: 'game_id' });
+    };
+    req.onsuccess = e => { db = e.target.result; res(db); };
+    req.onerror   = e => rej(e);
+  });
+}
+
+async function saveGame(gameData) {
+  await openDB();
+  return new Promise((res, rej) => {
+    const tx  = db.transaction(STORE, 'readwrite');
+    const req = tx.objectStore(STORE).put(gameData);
+    req.onsuccess = () => res();
+    req.onerror   = e => rej(e);
+  });
+}
+
+async function loadAllGames() {
+  await openDB();
+  return new Promise((res, rej) => {
+    const tx  = db.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).getAll();
+    req.onsuccess = e => res(e.target.result);
+    req.onerror   = e => rej(e);
+  });
+}
+
+async function loadGame(gameId) {
+  await openDB();
+  return new Promise((res, rej) => {
+    const tx  = db.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).get(gameId);
+    req.onsuccess = e => res(e.target.result);
+    req.onerror   = e => rej(e);
+  });
+}
+
+async function deleteGame(gameId) {
+  await openDB();
+  return new Promise((res, rej) => {
+    const tx  = db.transaction(STORE, 'readwrite');
+    const req = tx.objectStore(STORE).delete(gameId);
+    req.onsuccess = () => res();
+    req.onerror   = e => rej(e);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SCREENS
+// ═══════════════════════════════════════════════════════════════════════════
+
+const ALL_SCREENS = [
+  'mode-select-screen','setup-screen','session-setup-screen',
+  'session-chart-screen','game-list-screen','main-screen'
+];
+function _showOnly(id) {
+  ALL_SCREENS.forEach(s => {
+    document.getElementById(s).classList.toggle('hidden', s !== id);
+  });
+}
+
+function showModeSelect()    { _showOnly('mode-select-screen'); }
+function showSetup()         { _showOnly('setup-screen'); }
+function showSessionSetup()  { _showOnly('session-setup-screen'); populateSessionPitcherList(); }
+function showSessionChart()  { _showOnly('session-chart-screen'); }
+
+function showMain() {
+  _showOnly('main-screen');
+}
+
+function showGameList() {
+  _showOnly('game-list-screen');
+  renderGameList();
+}
+
+async function renderGameList() {
+  const games = await loadAllGames();
+  const el    = document.getElementById('game-list-items');
+  if (!games.length) {
+    el.innerHTML = '<p style="color:var(--light);font-size:0.85rem;">No saved games yet.</p>';
+    return;
+  }
+  el.innerHTML = games.reverse().map(g => {
+    const isSes = g.record_type === 'session';
+    const label = isSes
+      ? `${g.date} · ${g.session_type || 'Session'} · ${g.pitcher || ''} · ${g.pitches.length} pitches`
+      : `${g.date} · ${g.opponent} · ${g.pitches.length} pitches`;
+    const sub = isSes
+      ? `Session · ID: ${g.game_id}`
+      : `${g.location} · ID: ${g.game_id}`;
+    const resumeBtn = isSes
+      ? `<button class="btn btn-blue btn-sm" onclick="resumeSession('${g.game_id}')">Resume</button>`
+      : `<button class="btn btn-orange btn-sm" onclick="resumeGame('${g.game_id}')">Resume</button>`;
+    return `
+    <div class="game-item">
+      <div>
+        <div class="gi-info">${label}</div>
+        <div class="gi-sub">${sub}</div>
+      </div>
+      <div class="game-actions">
+        ${resumeBtn}
+        <button class="btn btn-red btn-sm" onclick="exportById('${g.game_id}')">Export</button>
+        <button class="btn btn-ghost btn-sm" onclick="confirmDeleteGame('${g.game_id}')">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function resumeGame(gameId) {
+  const saved = await loadGame(gameId);
+  if (!saved) return;
+
+  // Restore minimal state from saved game
+  state = newGameState();
+  state.gameId   = saved.game_id;
+  state.opponent = saved.opponent;
+  state.date     = saved.date;
+  state.location = saved.location;
+  state.pitches  = saved.pitches || [];
+  state.pitchNumGame = state.pitches.length;
+
+  // Try to reconstruct last known game state
+  if (state.pitches.length > 0) {
+    const lastPitch = state.pitches[state.pitches.length - 1];
+    // Estimate state from last pitch
+    state.inning  = lastPitch.inning || 1;
+    state.outs    = lastPitch.outs   || 0;
+    state.pitcher = { name: lastPitch.pitcher };
+    state.paId    = lastPitch.pa_id || 0;
+    // After last PA ended, increment state if needed
+    if (lastPitch.pa_outcome) {
+      const outc = lastPitch.pa_outcome;
+      if (['K','out','FC','SAC'].includes(outc)) {
+        state.outs = Math.min(state.outs + 1, 3);
+        if (state.outs >= 3) { state.outs = 0; state.inning++; state.isLeadoff = true; }
+      }
+      state.paId++;
+      state.pitchNumPA = 0;
+    } else {
+      state.balls   = lastPitch.balls;
+      state.strikes = lastPitch.strikes;
+      state.pitchNumPA = lastPitch.pitch_num_pa || 0;
+    }
+  }
+
+  updatePitcherDatalist();
+  showMain();
+  updateUI();
+}
+
+async function confirmDeleteGame(gameId) {
+  if (confirm(`Delete game ${gameId}? This cannot be undone.`)) {
+    await deleteGame(gameId);
+    renderGameList();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  GAME SETUP
+// ═══════════════════════════════════════════════════════════════════════════
+
+function startGame() {
+  const opp  = document.getElementById('setup-opponent').value.trim();
+  const dt   = document.getElementById('setup-date').value;
+  const loc  = document.getElementById('setup-location').value;
+
+  if (!opp || !dt) { alert('Please enter opponent and date.'); return; }
+
+  state = newGameState();
+  state.opponent = opp;
+  state.date     = dt;
+  state.location = loc;
+  state.gameId   = `hcc_${dt.replace(/-/g,'')}vs${opp.replace(/\s+/g,'').slice(0,12).toUpperCase()}`;
+
+  updatePitcherDatalist();
+  showMain();
+  updateUI();
+
+  // Auto-save on first load
+  autoSave();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  PITCHER MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════
+
+function updatePitcherDatalist() {
+  const sel = document.getElementById('pm-name');
+  sel.innerHTML = '<option value="">— Select Pitcher —</option>' +
+    ROSTER.map(n => `<option value="${n}">${n}</option>`).join('');
+}
+
+function openPitcherModal() {
+  updatePitcherDatalist();
+  document.getElementById('pm-name').value = state.pitcher ? state.pitcher.name : '';
+  // Pre-fill inherited runners based on current base state
+  const ir = state.runners.filter(Boolean).length;
+  document.getElementById('pm-ir').value = ir;
+  document.getElementById('pitcher-modal').classList.remove('hidden');
+}
+
+function closePitcherModal() {
+  document.getElementById('pitcher-modal').classList.add('hidden');
+}
+
+function confirmPitcherChange() {
+  const name = document.getElementById('pm-name').value;
+  const ir   = parseInt(document.getElementById('pm-ir').value) || 0;
+  if (!name) { alert('Select a pitcher.'); return; }
+
+  state.pitcher             = { name };
+  state.pitcherPitchCount  = 0;
+  state.inheritedRunners   = ir;
+  state.inheritedRunsScored = 0;
+  state.remainingInherited  = ir;
+  // Reset PA for new pitcher
+  state.paId++;
+  state.pitchNumPA = 0;
+  state.batterHand = null;
+  clearSelections();
+  closePitcherModal();
+  updateUI();
+  if (!document.getElementById('main-screen').classList.contains('hidden')) {
+    showNewBatterPrompt(null);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  PITCH LOGGING
+// ═══════════════════════════════════════════════════════════════════════════
+
+function setBatterHand(hand) {
+  state.batterHand = hand;
+  document.getElementById('btn-lhh').classList.toggle('selected', hand === 'L');
+  document.getElementById('btn-rhh').classList.toggle('selected', hand === 'R');
+  updateZoneLabels();
+}
+
+function updateZoneLabels() {
+  const inEl   = document.querySelector('#zone-grid .zc[data-zone="13"]');
+  const awayEl = document.querySelector('#zone-grid .zc[data-zone="14"]');
+  if (!inEl || !awayEl) return;
+  if (state.batterHand === 'L') {
+    inEl.textContent   = 'AWAY';
+    awayEl.textContent = 'IN';
+  } else {
+    inEl.textContent   = 'IN';
+    awayEl.textContent = 'AWAY';
+  }
+}
+
+function setPitchType(type) {
+  state.selPitchType = type;
+  document.querySelectorAll('#pitch-type-row .btn').forEach(b => {
+    b.classList.toggle('selected', b.textContent.trim() === type);
+  });
+}
+
+function setZone(zone) {
+  state.selZone = (state.selZone === zone) ? null : zone;  // toggle
+  document.querySelectorAll('#zone-grid .zc[data-zone]').forEach(el => {
+    el.classList.toggle('z-sel', parseInt(el.dataset.zone) === state.selZone);
+  });
+}
+
+function setVelFromSelect(val) {
+  state.velocity = val ? parseInt(val) : null;
+}
+
+function clearZoneVel() {
+  state.selZone  = null;
+  state.velocity = null;
+  document.querySelectorAll('#zone-grid .zc').forEach(el => el.classList.remove('z-sel'));
+  const vs = document.getElementById('vel-select');
+  if (vs) vs.value = '';
+}
+
+function addRun() {
+  state.runsAllowed = (state.runsAllowed || 0) + 1;
+  updateUI();
+  autoSave();
+}
+
+function setResult(result) {
+  state.selResult = result;
+  // Highlight result button
+  document.querySelectorAll('#result-row .btn, #result-row-2 .btn').forEach(b => {
+    b.classList.toggle('selected', b.textContent.trim() === result ||
+      (result === 'Called Strike' && b.textContent.trim() === 'K-Called') ||
+      (result === 'Swing Strike'  && b.textContent.trim() === 'K-Swing'));
+  });
+  // Show/hide contact section
+  const inPlay = (result === 'In Play');
+  document.getElementById('contact-section').classList.toggle('hidden', !inPlay);
+  if (!inPlay) {
+    document.getElementById('outcome-section').classList.add('hidden');
+    state.selContact = null;
+    state.selOutcome = null;
+    document.querySelectorAll('#contact-row .btn').forEach(b => b.classList.remove('selected'));
+  }
+}
+
+function setContact(contact) {
+  state.selContact = contact;
+  document.querySelectorAll('#contact-row .btn').forEach(b => {
+    const bContact = b.dataset.contact || b.textContent.trim();
+    b.classList.toggle('selected', bContact === contact ||
+      (contact === 'FB' && b.textContent.trim() === 'Fly') ||
+      (contact === 'PU' && b.textContent.trim() === 'Pop'));
+  });
+  document.getElementById('outcome-section').classList.remove('hidden');
+}
+
+function setOutcome(outcome) {
+  state.selOutcome = outcome;
+  document.querySelectorAll('#outcome-row .btn, #outcome-row-2 .btn').forEach(b => {
+    b.classList.toggle('selected', b.textContent.trim() === outcome ||
+      (outcome === 'out' && b.textContent.trim() === 'Out') ||
+      (outcome === 'E'   && b.textContent.trim() === 'Error'));
+  });
+}
+
+function logPitch() {
+  // ── Validation ────────────────────────────────────────────────────
+  if (!state.pitcher) { alert('Select a pitcher first.'); return; }
+  if (!state.batterHand) { alert('Select batter hand (L/R) first.'); return; }
+  if (!state.selPitchType) { alert('Select pitch type first.'); return; }
+  if (!state.selZone) { alert('Tag a location first.'); return; }
+  if (!state.selResult) { alert('Select pitch result first.'); return; }
+  if (state.selResult === 'In Play' && !state.selContact) { alert('Select contact type.'); return; }
+  if (state.selResult === 'In Play' && !state.selOutcome) { alert('Select PA outcome.'); return; }
+
+  // velocity is already tracked in state via adjustVel()
+
+  state.pitchNumGame++;
+  state.pitchNumPA++;
+  state.pitcherPitchCount++;
+
+  const isFirstPitch = state.pitchNumPA === 1;
+  const twoOut       = state.outs === 2;
+
+  // Update two-strike tracking
+  if (state.strikes === 2) {
+    state.twoStrikeReachedThisPA = true;
+    if (state.balls === 0 && !state.twoStrikeCountWasZeroTwo) {
+      state.twoStrikeCountWasZeroTwo = true;
+    }
+  }
+
+  // Build pitch record
+  const pitch = {
+    pitcher:                    state.pitcher.name,
+    pa_id:                      state.paId,
+    inning:                     state.inning,
+    batter_hand:                state.batterHand,
+    balls:                      state.balls,
+    strikes:                    state.strikes,
+    outs:                       state.outs,
+    pitch_num_game:             state.pitchNumGame,
+    pitch_num_pa:               state.pitchNumPA,
+    pitch_type:                 state.selPitchType,
+    pitch_result:               state.selResult,
+    contact_type:               state.selResult === 'In Play' ? state.selContact : null,
+    pa_outcome:                 null,
+    zone:                       state.selZone,
+    velocity:                   state.velocity,
+    is_first_pitch:             isFirstPitch ? 1 : 0,
+    is_leadoff:                 (state.isLeadoff && isFirstPitch) ? 1 : 0,
+    is_two_out:                 twoOut ? 1 : 0,
+    two_strike_reached:         state.twoStrikeReachedThisPA ? 1 : 0,
+    two_strike_count_was_zero_two: state.twoStrikeCountWasZeroTwo ? 1 : 0,
+    inherited_runners:          isFirstPitch ? state.inheritedRunners : 0,
+    inherited_runs_scored:      0,
+    runs_allowed:               0,
+    sb_attempt:                 0,
+    sb_success:                 0,
+    cs_pickoff:                 0,
+    timestamp:                  new Date().toISOString(),
+  };
+
+  // ── Update count based on result ────────────────────────────────
+  const result = state.selResult;
+
+  if (result === 'Ball') {
+    state.balls++;
+    if (state.balls >= 4) {
+      pitch.pa_outcome = 'BB';
+      const bbAdv = advanceRunners('BB');
+      pitch.inherited_runs_scored = bbAdv.irs;
+      pitch.runs_allowed = bbAdv.runs;
+      _paFlash = { outcome: 'BB', count: state.pitchNumPA };
+      endPA();
+    } else {
+      resetPitchSelections();
+    }
+  } else if (result === 'Called Strike' || result === 'Swing Strike') {
+    state.strikes++;
+    if (state.strikes >= 3) {
+      state.outs++;
+      pitch.pa_outcome = 'K';
+      const prevRunners = [...state.runners];
+      const paFlash = { outcome: 'K', count: state.pitchNumPA };
+      state.pitches.push(pitch);
+      autoSave();
+      updateUI();
+      if (prevRunners.some(Boolean)) {
+        showRunnerModal('K', prevRunners, () => {
+          _paFlash = paFlash;
+          if (state.outs >= 3) endInning(); else endPA();
+          updateUI(); autoSave();
+        });
+      } else {
+        _paFlash = paFlash;
+        if (state.outs >= 3) endInning(); else endPA();
+        updateUI(); autoSave();
+      }
+      return;
+    } else {
+      resetPitchSelections();
+    }
+  } else if (result === 'Foul') {
+    if (state.strikes < 2) state.strikes++;
+    resetPitchSelections();
+  } else if (result === 'In Play') {
+    const outcome = state.selOutcome;
+    pitch.pa_outcome = outcome;
+
+    if (['out', 'FC', 'SAC'].includes(outcome)) state.outs++;
+    if (outcome === 'DP') state.outs = Math.min(3, state.outs + 2);
+
+    if (outcome === 'HR') {
+      const runnersOn = state.runners.filter(Boolean).length;
+      const runs = runnersOn + 1;
+      const irs  = Math.min(runnersOn, state.remainingInherited);
+      state.inheritedRunsScored += irs;
+      state.remainingInherited   = 0;
+      state.runsAllowed = (state.runsAllowed || 0) + runs;
+      state.runners = [false, false, false];
+      pitch.inherited_runs_scored = irs;
+      pitch.runs_allowed = runs;
+      _paFlash = { outcome: 'HR', count: state.pitchNumPA };
+      state.pitches.push(pitch);
+      autoSave();
+      if (state.outs >= 3) endInning(); else endPA();
+      updateUI(); autoSave();
+      return;
+    }
+
+    const prevRunners = [...state.runners];
+    const paFlash = { outcome, count: state.pitchNumPA };
+    state.pitches.push(pitch);
+    autoSave();
+    updateUI();
+
+    if (prevRunners.some(Boolean)) {
+      showRunnerModal(outcome, prevRunners, () => {
+        _paFlash = paFlash;
+        if (state.outs >= 3) endInning(); else endPA();
+        updateUI(); autoSave();
+      });
+    } else {
+      const def = calcDefaultBases(outcome, prevRunners);
+      state.runners = def.bases;
+      _paFlash = paFlash;
+      if (state.outs >= 3) endInning(); else endPA();
+      updateUI(); autoSave();
+    }
+    return;
+  } else if (result === 'HBP') {
+    pitch.pa_outcome = 'HBP';
+    const hbpAdv = advanceRunners('HBP');
+    pitch.inherited_runs_scored = hbpAdv.irs;
+    pitch.runs_allowed = hbpAdv.runs;
+    _paFlash = { outcome: 'HBP', count: state.pitchNumPA };
+    endPA();
+  } else if (result === 'WP' || result === 'PB') {
+    // Pitch recorded, PA continues, optional runner advance
+    pitch.pa_outcome = null;
+    resetPitchSelections();
+  }
+
+  state.pitches.push(pitch);
+  autoSave();
+  updateUI();
+}
+
+// ── PA FLASH + NEW BATTER PROMPT ─────────────────────────────────────────────
+// Set _paFlash before calling endPA/endInning to pass result info to the prompt.
+// {outcome, count} = show result banner; null = prompt only; undefined = no modal.
+let _paFlash = undefined;
+
+const PA_LABELS = {
+  K:'K', BB:'BB', HBP:'HBP', out:'Out', '1B':'1B', '2B':'2B',
+  '3B':'3B', HR:'HR', E:'Error', FC:'FC', SAC:'SAC', DP:'DP (2 outs)'
+};
+
+function showNewBatterPrompt(flash) {
+  const resultWrap = document.getElementById('nb-result-wrap');
+  const resultText = document.getElementById('nb-result-text');
+  if (flash && flash.outcome) {
+    const label = PA_LABELS[flash.outcome] || flash.outcome;
+    const countStr = flash.count ? `  ·  ${flash.count} pitch${flash.count === 1 ? '' : 'es'}` : '';
+    resultText.textContent = label + countStr;
+    resultWrap.style.display = '';
+  } else {
+    resultWrap.style.display = 'none';
+  }
+  document.getElementById('nb-context').textContent =
+    `Inning ${state.inning}  ·  ${state.outs} out${state.outs === 1 ? '' : 's'}`;
+  document.getElementById('new-batter-modal').classList.remove('hidden');
+}
+
+function selectNewBatter(hand) {
+  document.getElementById('new-batter-modal').classList.add('hidden');
+  setBatterHand(hand);
+}
+
+// ── ZONE GRID TOGGLE ──────────────────────────────────────────────────────────
+
+function toggleZoneGrid() {
+  const el   = document.getElementById('zone-collapsible');
+  const icon = document.getElementById('zone-toggle-icon');
+  const nowHidden = el.classList.toggle('hidden');
+  icon.textContent = nowHidden ? '▾' : '▴';
+}
+
+function endPA() {
+  const flash = _paFlash;
+  _paFlash = undefined;
+  state.isLeadoff         = false;
+  state.paId++;
+  state.pitchNumPA        = 0;
+  state.balls             = 0;
+  state.strikes           = 0;
+  state.batterHand        = null;
+  state.twoStrikeReachedThisPA   = false;
+  state.twoStrikeCountWasZeroTwo = false;
+  state.inheritedRunners  = 0;
+  clearSelections();
+
+  // Clear batter hand buttons
+  document.getElementById('btn-lhh').classList.remove('selected');
+  document.getElementById('btn-rhh').classList.remove('selected');
+
+  if (state.pitcher && flash !== undefined) {
+    showNewBatterPrompt(flash);
+  }
+}
+
+function endInning() {
+  state.inning++;
+  state.outs      = 0;
+  state.runners   = [false, false, false];
+  state.inheritedRunners   = 0;
+  state.remainingInherited = 0;
+  endPA();
+  state.isLeadoff = true;  // after endPA() so it isn't clobbered
+}
+
+function resetPitchSelections() {
+  state.selZone    = null;
+  state.velocity   = null;
+  state.selResult  = null;
+  state.selContact = null;
+  state.selOutcome = null;
+  document.querySelectorAll('#result-row .btn, #result-row-2 .btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('contact-section').classList.add('hidden');
+  document.getElementById('outcome-section').classList.add('hidden');
+  document.querySelectorAll('#contact-row .btn, #outcome-row .btn, #outcome-row-2 .btn').forEach(b => b.classList.remove('selected'));
+  document.querySelectorAll('#zone-grid .zc').forEach(el => el.classList.remove('z-sel'));
+  state.velocity = null;
+  const vs = document.getElementById('vel-select');
+  if (vs) vs.value = '';
+}
+
+function clearSelections() {
+  resetPitchSelections();
+  state.selPitchType = null;
+  document.querySelectorAll('#pitch-type-row .btn').forEach(b => b.classList.remove('selected'));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  BASE RUNNER ADVANCEMENT
+// ═══════════════════════════════════════════════════════════════════════════
+
+function advanceRunners(outcome) {
+  // Only handles BB and HBP (fully deterministic forced advances)
+  let r = [...state.runners];
+  let runs = 0;
+  let irs  = 0;
+
+  if (outcome === 'BB' || outcome === 'HBP') {
+    const r0 = r[0], r1 = r[1], r2 = r[2];
+    if (r0 && r1 && r2) {
+      runs++;
+      irs = Math.min(1, state.remainingInherited);
+      state.inheritedRunsScored += irs;
+      state.remainingInherited = Math.max(0, state.remainingInherited - irs);
+    }
+    if (r0 && r1) r[2] = true;
+    if (r0)       r[1] = true;
+    r[0] = true;
+  }
+
+  state.runners = r;
+  state.runsAllowed = (state.runsAllowed || 0) + runs;
+  return { irs, runs };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  RUNNER MODAL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function calcDefaultBases(outcome, prevRunners) {
+  const r = [...prevRunners];
+  switch (outcome) {
+    case 'K':
+    case 'out':
+      return { bases: [...r] };
+    case 'DP': {
+      const b = [...r];
+      for (let i = 0; i < 3; i++) { if (b[i]) { b[i] = false; break; } }
+      return { bases: b };
+    }
+    case '1B':
+      return { bases: [true, !!r[0], !!r[1]] };
+    case '2B':
+      return { bases: [false, true, !!r[0]] };  // 1B runner → 3B, batter → 2B
+    case '3B':
+      return { bases: [false, false, true] };
+    case 'E':
+      return { bases: [true, !!r[0], !!r[1]] };
+    case 'SAC':
+      return { bases: [!!r[0], !!r[1], false] };
+    case 'FC': {
+      const b = [...r];
+      for (let i = 0; i < 3; i++) { if (b[i]) { b[i] = false; break; } }
+      b[0] = true;
+      return { bases: b };
+    }
+    default:
+      return { bases: [...r] };
+  }
+}
+
+function defaultRunsFor(outcome, prevRunners) {
+  const r = prevRunners;
+  switch (outcome) {
+    case '1B': return r[2] ? 1 : 0;
+    case '2B': return (r[1] ? 1 : 0) + (r[2] ? 1 : 0);
+    case '3B': return r.filter(Boolean).length;
+    case 'SAC': return r[2] ? 1 : 0;
+    case 'E': return r[2] ? 1 : 0;
+    default: return 0;
+  }
+}
+
+let _runnerModalCallback = null;
+let _runnerModalRuns     = 0;
+let _runnerModalBases    = [false, false, false];
+
+function showRunnerModal(outcome, prevRunners, callback) {
+  _runnerModalCallback = callback;
+  _runnerModalRuns     = defaultRunsFor(outcome, prevRunners);
+  _runnerModalBases    = [...calcDefaultBases(outcome, prevRunners).bases];
+
+  document.getElementById('runner-modal-title').textContent = `After: ${outcome}`;
+  document.getElementById('run-modal-count').textContent = _runnerModalRuns;
+  ['rm-1b', 'rm-2b', 'rm-3b'].forEach((id, i) => {
+    document.getElementById(id).className = 'base-lg' + (_runnerModalBases[i] ? ' on' : '');
+  });
+  document.getElementById('runner-modal').classList.remove('hidden');
+}
+
+function adjustRunModal(delta) {
+  _runnerModalRuns = Math.max(0, _runnerModalRuns + delta);
+  document.getElementById('run-modal-count').textContent = _runnerModalRuns;
+}
+
+function toggleRunnerBase(idx) {
+  _runnerModalBases[idx] = !_runnerModalBases[idx];
+  const ids = ['rm-1b', 'rm-2b', 'rm-3b'];
+  document.getElementById(ids[idx]).className = 'base-lg' + (_runnerModalBases[idx] ? ' on' : '');
+}
+
+function confirmRunnerModal() {
+  document.getElementById('runner-modal').classList.add('hidden');
+  state.runners = [..._runnerModalBases];
+  const irs = Math.min(_runnerModalRuns, state.remainingInherited);
+  state.inheritedRunsScored += irs;
+  state.remainingInherited = Math.max(0, state.remainingInherited - irs);
+  if (state.pitches.length > 0) {
+    state.pitches[state.pitches.length - 1].inherited_runs_scored = irs;
+    state.pitches[state.pitches.length - 1].runs_allowed = _runnerModalRuns;
+  }
+  state.runsAllowed = (state.runsAllowed || 0) + _runnerModalRuns;
+  if (_runnerModalCallback) { _runnerModalCallback(); _runnerModalCallback = null; }
+}
+
+function endGame() {
+  closeOverrideModal();
+  if (!confirm('End game? This will export the game file.')) return;
+  exportGame();
+  setTimeout(() => showGameList(), 400);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  STOLEN BASES / CS
+// ═══════════════════════════════════════════════════════════════════════════
+
+function logSB(success) {
+  // Add a SB/CS event to the last pitch, or create a standalone entry
+  if (state.pitches.length === 0) return;
+  const last = state.pitches[state.pitches.length - 1];
+
+  if (success) {
+    last.sb_attempt = (last.sb_attempt || 0) + 1;
+    last.sb_success = (last.sb_success || 0) + 1;
+    // Advance runner (assume 1B→2B for simplicity)
+    if (state.runners[0]) { state.runners[0] = false; state.runners[1] = true; }
+    else if (state.runners[1]) { state.runners[1] = false; state.runners[2] = true; }
+  } else {
+    last.cs_pickoff = (last.cs_pickoff || 0) + 1;
+    // Remove lead runner
+    for (let i = 0; i < 3; i++) {
+      if (state.runners[i]) { state.runners[i] = false; break; }
+    }
+    state.outs++;
+    if (state.outs >= 3) { _paFlash = null; endInning(); }
+  }
+
+  autoSave();
+  updateUI();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  UNDO
+// ═══════════════════════════════════════════════════════════════════════════
+
+function undoLastPitch() {
+  if (state.pitches.length === 0) return;
+  state.pitches.pop();
+  state.pitchNumGame = Math.max(0, state.pitchNumGame - 1);
+  state.pitcherPitchCount = Math.max(0, state.pitcherPitchCount - 1);
+
+  // Rebuild state from scratch (simple approach)
+  const gid  = state.gameId;
+  const opp  = state.opponent;
+  const dt   = state.date;
+  const loc  = state.location;
+  const pits = [...state.pitches];
+  const pit  = state.pitcher;
+
+  state = newGameState();
+  state.gameId   = gid;
+  state.opponent = opp;
+  state.date     = dt;
+  state.location = loc;
+  state.pitcher  = pit;
+  state.pitches  = pits;
+  state.pitchNumGame = pits.length;
+
+  // Reconstruct from last pitch
+  if (pits.length > 0) {
+    const lp = pits[pits.length - 1];
+    state.inning  = lp.inning;
+    state.paId    = lp.pa_id;
+    state.pitcher = { name: lp.pitcher };
+    if (lp.pa_outcome) {
+      // Last pitch ended a PA, need next state
+      const isOut = ['K','out','FC','SAC'].includes(lp.pa_outcome);
+      state.outs = lp.outs + (isOut ? 1 : 0);
+      if (state.outs >= 3) { state.outs = 0; state.inning = lp.inning + 1; }
+      state.balls   = 0;
+      state.strikes = 0;
+      state.paId    = lp.pa_id + 1;
+      state.pitchNumPA = 0;
+    } else {
+      state.balls      = lp.balls;
+      state.strikes    = lp.strikes;
+      state.outs       = lp.outs;
+      state.paId       = lp.pa_id;
+      state.pitchNumPA = lp.pitch_num_pa;
+    }
+  }
+
+  autoSave();
+  updateUI();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  OVERRIDE MODAL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function openOverrideModal()  { document.getElementById('override-modal').classList.remove('hidden'); }
+function closeOverrideModal() { document.getElementById('override-modal').classList.add('hidden'); }
+
+function ovEndInning() {
+  closeOverrideModal();
+  _paFlash = null;
+  endInning();
+  updateUI();
+  autoSave();
+}
+
+function ovAddRunner() {
+  closeOverrideModal();
+  document.getElementById('add-runner-modal').classList.remove('hidden');
+}
+function closeAddRunnerModal() { document.getElementById('add-runner-modal').classList.add('hidden'); }
+function addRunnerTo(base) {
+  state.runners[base] = true;
+  closeAddRunnerModal();
+  updateUI();
+  autoSave();
+}
+
+function ovRemoveRunner() {
+  closeOverrideModal();
+  document.getElementById('remove-runner-modal').classList.remove('hidden');
+}
+function closeRemoveRunnerModal() { document.getElementById('remove-runner-modal').classList.add('hidden'); }
+function removeRunnerFrom(base) {
+  state.runners[base] = false;
+  closeRemoveRunnerModal();
+  updateUI();
+  autoSave();
+}
+
+function ovAddOut() {
+  closeOverrideModal();
+  state.outs++;
+  if (state.outs >= 3) {
+    _paFlash = null;
+    endInning();
+  }
+  updateUI();
+  autoSave();
+}
+
+function ovSkipBatter() {
+  closeOverrideModal();
+  _paFlash = null;
+  endPA();
+  updateUI();
+  autoSave();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  PITCHER CHANGE MODAL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function openPitcherModal() {
+  updatePitcherDatalist();
+  const name = state.pitcher ? state.pitcher.name : '';
+  document.getElementById('pm-name').value = name;
+  const ir = state.runners.filter(Boolean).length;
+  document.getElementById('pm-ir').value = ir;
+  document.getElementById('pitcher-modal').classList.remove('hidden');
+}
+
+function closePitcherModal() {
+  document.getElementById('pitcher-modal').classList.add('hidden');
+}
+
+function confirmPitcherChange() {
+  const name = document.getElementById('pm-name').value;
+  const ir   = parseInt(document.getElementById('pm-ir').value) || 0;
+  if (!name) { alert('Select a pitcher.'); return; }
+
+  state.pitcher           = { name };
+  state.pitcherPitchCount = 0;
+  state.inheritedRunners  = ir;
+  state.paId++;
+  state.pitchNumPA = 0;
+  state.batterHand = null;
+  clearSelections();
+  document.getElementById('btn-lhh').classList.remove('selected');
+  document.getElementById('btn-rhh').classList.remove('selected');
+  closePitcherModal();
+  updateUI();
+  showNewBatterPrompt(null);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  AUTO-SAVE
+// ═══════════════════════════════════════════════════════════════════════════
+
+function autoSave() {
+  if (!state.gameId) return;
+  const gameData = {
+    game_id:  state.gameId,
+    date:     state.date,
+    opponent: state.opponent,
+    location: state.location,
+    pitches:  state.pitches,
+    saved_at: new Date().toISOString(),
+  };
+  saveGame(gameData).catch(e => console.error('Save failed:', e));
+  // Also save to localStorage as fallback
+  try {
+    localStorage.setItem('hcc_current_game', JSON.stringify(gameData));
+  } catch(e) {}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  EXPORT
+// ═══════════════════════════════════════════════════════════════════════════
+
+function exportGame() {
+  if (!state.gameId || state.pitches.length === 0) {
+    alert('No pitches logged yet.');
+    return;
+  }
+  const exportData = {
+    game_id:  state.gameId,
+    date:     state.date,
+    opponent: state.opponent,
+    location: state.location,
+    pitches:  state.pitches,
+  };
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `${state.gameId}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function exportById(gameId) {
+  const g = await loadGame(gameId);
+  if (!g) return;
+  const blob = new Blob([JSON.stringify(g, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `${gameId}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  UI UPDATE
+// ═══════════════════════════════════════════════════════════════════════════
+
+function updateUI() {
+  updateZoneLabels();
+  // Header
+  document.getElementById('hdr-game-info').textContent =
+    state.gameId ? `${state.date} vs ${state.opponent}` : '—';
+
+  // Scoreboard
+  document.getElementById('sb-inning').textContent  = state.inning;
+  const outsEl = document.getElementById('sb-outs');
+  outsEl.textContent = state.outs;
+  outsEl.className   = 'sb-val' + (state.outs === 2 ? ' danger' : '');
+  document.getElementById('sb-runs').textContent    = state.runsAllowed || 0;
+  document.getElementById('sb-count').textContent   = `${state.balls}-${state.strikes}`;
+  document.getElementById('sb-pitches').textContent = state.pitchNumGame;
+
+  // Diamond
+  document.getElementById('base-1b').className = 'base' + (state.runners[0] ? ' on' : '');
+  document.getElementById('base-2b').className = 'base' + (state.runners[1] ? ' on' : '');
+  document.getElementById('base-3b').className = 'base' + (state.runners[2] ? ' on' : '');
+
+  // Pitcher bar
+  if (state.pitcher) {
+    document.getElementById('pitcher-name').textContent = state.pitcher.name;
+    document.getElementById('pitcher-sub').textContent  =
+      `${state.pitcherPitchCount} pitches · ${state.inheritedRunners > 0 ? state.inheritedRunners + ' IR' : ''}`;
+  } else {
+    document.getElementById('pitcher-name').textContent = '— Select Pitcher —';
+    document.getElementById('pitcher-sub').textContent  = 'Tap Change Pitcher';
+  }
+
+  // Batter / PA info
+  document.getElementById('pa-info').textContent =
+    `PA#${state.paId + 1} · Pitch#${state.pitchNumPA}`;
+
+  // Recent pitches log
+  renderPitchLog();
+}
+
+function renderPitchLog() {
+  const log     = document.getElementById('pitch-log');
+  const recent  = state.pitches.slice(-6).reverse();
+  if (!recent.length) { log.innerHTML = ''; return; }
+
+  log.innerHTML = recent.map(p => {
+    const res = p.pitch_result;
+    let resCls = '';
+    if (res === 'Ball')        resCls = '';
+    else if (res.includes('Strike')) resCls = 'red';
+    else if (res === 'Foul')   resCls = 'yellow';
+    else if (res === 'In Play') resCls = 'green';
+
+    const outcomePill = p.pa_outcome
+      ? `<span class="pill green">${p.pa_outcome}</span>` : '';
+    const velPill = p.velocity
+      ? `<span class="pill">${p.velocity}</span>` : '';
+    const zonePill = p.zone
+      ? `<span class="pill">Z${p.zone}</span>` : '';
+    const countStr = `${p.balls}-${p.strikes}`;
+    const pitchLabel = p.pitch_result.replace('Called Strike','K-C').replace('Swing Strike','K-S');
+
+    return `<div class="pitch-row">
+      <span class="pbadge ${p.pitch_type}">${p.pitch_type}</span>
+      <span style="color:var(--light);font-size:0.72rem;">${p.inning}i ${countStr} ${p.outs}o</span>
+      <span class="pill ${resCls}">${pitchLabel}</span>
+      ${zonePill}${velPill}${outcomePill}
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SESSION MODE
+// ═══════════════════════════════════════════════════════════════════════════
+
+let sesState = {
+  sessionId: null, pitcher: null, date: null,
+  sessionType: null, notes: null, pitches: [],
+  pitchCount: 0, strikes: 0, balls: 0,
+  selPitch: null, selZone: null,
+};
+
+function populateSessionPitcherList() {
+  const sel = document.getElementById('ses-pitcher');
+  sel.innerHTML = '<option value="">— Select Pitcher —</option>' +
+    ROSTER.map(n => `<option value="${n}">${n}</option>`).join('');
+  document.getElementById('ses-date').value = new Date().toISOString().slice(0, 10);
+}
+
+function startSession() {
+  const pitcher = document.getElementById('ses-pitcher').value;
+  const dt      = document.getElementById('ses-date').value;
+  const type    = document.getElementById('ses-type').value;
+  const notes   = document.getElementById('ses-notes').value.trim();
+
+  if (!pitcher || !dt) { alert('Please select a pitcher and date.'); return; }
+
+  const ts = Date.now();
+  sesState = {
+    sessionId:   `SES_${dt.replace(/-/g,'')}_${pitcher.replace(/[\s.]/g,'').slice(0,10).toUpperCase()}_${ts}`,
+    pitcher, date: dt, sessionType: type, notes,
+    pitches: [], pitchCount: 0, strikes: 0, balls: 0,
+    selPitch: null, selZone: null,
+  };
+
+  showSessionChart();
+  sesSaveToStorage();
+  sesUpdateUI();
+}
+
+function sesSelectPitch(type) {
+  sesState.selPitch = type;
+  document.querySelectorAll('#ses-pitch-type-row .btn').forEach(b => b.classList.remove('selected'));
+  const map = {FB:0,CT:1,SL:2,CB:3,CH:4,OTH:5};
+  document.querySelectorAll('#ses-pitch-type-row .btn')[map[type]]?.classList.add('selected');
+}
+
+function sesSelectZone(zone) {
+  sesState.selZone = zone;
+  sesUpdateZoneHighlight();
+}
+
+function sesUpdateZoneHighlight() {
+  const z = sesState.selZone;
+  // Clear all
+  document.querySelectorAll('#ses-zone-grid .zc').forEach(el => el.classList.remove('z-sel'));
+  if (!z) return;
+  const ids = {
+    1:['sz1'],2:['sz2'],3:['sz3'],4:['sz4'],5:['sz5'],
+    6:['sz6'],7:['sz7'],8:['sz8'],9:['sz9'],
+    11:['sz11a','sz11b','sz11c'],12:['sz12a','sz12b','sz12c'],
+    13:['sz13a','sz13b','sz13c'],14:['sz14a','sz14b','sz14c'],
+  };
+  (ids[z] || []).forEach(id => document.getElementById(id)?.classList.add('z-sel'));
+}
+
+function sesLogPitch(result) {
+  if (!sesState.selPitch) { alert('Select a pitch type first.'); return; }
+
+  const velo = parseInt(document.getElementById('ses-vel-select').value) || null;
+  sesState.pitchCount++;
+
+  const isStrike = ['Called Strike','Swing Strike','Foul','In Play'].includes(result);
+  if (isStrike) sesState.strikes++;
+  else          sesState.balls++;
+
+  const pitch = {
+    pitcher:       sesState.pitcher,
+    inning:        1,
+    batter_hand:   null,
+    balls:         0, strikes: 0, outs: 0,
+    pitch_num_game: sesState.pitchCount,
+    pitch_num_pa:   sesState.pitchCount,
+    pa_id:          sesState.pitchCount,
+    pitch_type:    sesState.selPitch,
+    pitch_result:  result,
+    contact_type:  null,
+    pa_outcome:    null,
+    zone:          sesState.selZone,
+    velocity:      velo,
+    is_first_pitch: false, is_leadoff: false, is_two_out: false,
+    two_strike_reached: false, two_strike_count_was_zero_two: false,
+    inherited_runners: 0, inherited_runs_scored: 0, runs_allowed: 0,
+    sb_attempt: 0, sb_success: 0, cs_pickoff: 0,
+    timestamp: new Date().toISOString(),
+  };
+
+  sesState.pitches.push(pitch);
+  sesState.selZone = null;
+  sesSaveToStorage();
+  sesUpdateUI();
+}
+
+function sesUndo() {
+  if (!sesState.pitches.length) return;
+  const last = sesState.pitches.pop();
+  sesState.pitchCount--;
+  const wasStrike = ['Called Strike','Swing Strike','Foul','In Play'].includes(last.pitch_result);
+  if (wasStrike) sesState.strikes--; else sesState.balls--;
+  sesSaveToStorage();
+  sesUpdateUI();
+}
+
+function sesUpdateUI() {
+  document.getElementById('ses-hdr-info').textContent =
+    `${sesState.pitcher} · ${sesState.sessionType} · ${sesState.date}`;
+  document.getElementById('ses-sb-pitches').textContent = sesState.pitchCount;
+  document.getElementById('ses-sb-strikes').textContent = sesState.strikes;
+  document.getElementById('ses-sb-balls').textContent   = sesState.balls;
+  const pct = sesState.pitchCount > 0
+    ? Math.round(sesState.strikes / sesState.pitchCount * 100) + '%'
+    : '-';
+  document.getElementById('ses-sb-pct').textContent = pct;
+  sesUpdateZoneHighlight();
+  sesRenderLog();
+}
+
+function sesRenderLog() {
+  const log    = document.getElementById('ses-pitch-log');
+  const recent = sesState.pitches.slice(-6).reverse();
+  if (!recent.length) { log.innerHTML = ''; return; }
+  const colorClass = r => {
+    if (['Called Strike','Swing Strike'].includes(r)) return 'green';
+    if (r === 'Ball') return 'red';
+    if (r === 'Foul') return 'yellow';
+    return '';
+  };
+  log.innerHTML = recent.map((p, i) => `
+    <div class="pitch-row">
+      <span style="color:var(--light);font-size:0.7rem;">#${sesState.pitchCount - i}</span>
+      <span class="pbadge ${p.pitch_type}">${p.pitch_type}</span>
+      <span class="pill">${p.zone ? 'Z' + p.zone : '-'}</span>
+      ${p.velocity ? `<span class="pill">${p.velocity}</span>` : ''}
+      <span class="pill ${colorClass(p.pitch_result)}">${p.pitch_result}</span>
+    </div>
+  `).join('');
+}
+
+async function sesSaveToStorage() {
+  const data = buildSessionExport();
+  await saveGame(data);
+}
+
+function buildSessionExport() {
+  return {
+    game_id:      sesState.sessionId,
+    date:         sesState.date,
+    opponent:     '',
+    location:     'bullpen',
+    record_type:  'session',
+    session_type: sesState.sessionType,
+    pitcher:      sesState.pitcher,
+    notes:        sesState.notes,
+    pitches:      sesState.pitches,
+  };
+}
+
+function exportSession() {
+  if (!sesState.sessionId || sesState.pitches.length === 0) {
+    alert('No pitches logged yet.'); return;
+  }
+  const data = buildSessionExport();
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `${sesState.sessionId}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function resumeSession(sessionId) {
+  const g = await loadGame(sessionId);
+  if (!g) return;
+  const pitches = g.pitches || [];
+  const strikes = pitches.filter(p =>
+    ['Called Strike','Swing Strike','Foul','In Play'].includes(p.pitch_result)).length;
+  sesState = {
+    sessionId:   g.game_id,
+    pitcher:     g.pitcher || (pitches[0]?.pitcher || ''),
+    date:        g.date,
+    sessionType: g.session_type || 'Pen',
+    notes:       g.notes || '',
+    pitches,
+    pitchCount:  pitches.length,
+    strikes,
+    balls:       pitches.length - strikes,
+    selPitch:    null, selZone: null,
+  };
+  showSessionChart();
+  sesUpdateUI();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════════════════════
+
+(function init() {
+  // Set today's date as default
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('setup-date').value = today;
+
+  // Populate game velocity dropdown 60-105
+  const vs = document.getElementById('vel-select');
+  for (let v = 60; v <= 105; v++) {
+    const opt = document.createElement('option');
+    opt.value = v; opt.textContent = v;
+    vs.appendChild(opt);
+  }
+
+  // Populate session velocity dropdown 60-105
+  const svs = document.getElementById('ses-vel-select');
+  for (let v = 60; v <= 105; v++) {
+    const opt = document.createElement('option');
+    opt.value = v; opt.textContent = v;
+    if (v === 85) opt.selected = true;
+    svs.appendChild(opt);
+  }
+
+  updatePitcherDatalist();
+  showModeSelect();
+})();
+</script>
+
+<script>
+// Offline keeper: registered after load so it never delays app startup
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    setTimeout(function () {
+      navigator.serviceWorker.register("sw.js", { scope: "./" }).catch(function(){});
+    }, 2000);
+  });
+}
+</script>
+</body>
+</html>
