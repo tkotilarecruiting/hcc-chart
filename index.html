@@ -710,6 +710,27 @@ select option { background: var(--card); }
 <div id="override-modal" class="overlay hidden">
   <div class="modal">
     <h2>⚙ Manual Override</h2>
+    <div style="border:1px solid #2a3a4a;border-radius:8px;padding:10px;margin-bottom:10px;">
+      <div class="sec-label" style="margin-bottom:8px;">Override Count</div>
+      <div style="display:flex;gap:18px;justify-content:center;align-items:flex-start;">
+        <div style="text-align:center;">
+          <div style="font-size:0.68rem;color:#8a9bb0;margin-bottom:6px;letter-spacing:0.05em;">BALLS</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button class="btn btn-ghost" style="padding:8px 14px;" onclick="ovAdjCount('b',-1)">−</button>
+            <span id="ov-balls" style="font-size:1.4rem;font-weight:800;width:22px;display:inline-block;">0</span>
+            <button class="btn btn-ghost" style="padding:8px 14px;" onclick="ovAdjCount('b',1)">+</button>
+          </div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:0.68rem;color:#8a9bb0;margin-bottom:6px;letter-spacing:0.05em;">STRIKES</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button class="btn btn-ghost" style="padding:8px 14px;" onclick="ovAdjCount('s',-1)">−</button>
+            <span id="ov-strikes" style="font-size:1.4rem;font-weight:800;width:22px;display:inline-block;">0</span>
+            <button class="btn btn-ghost" style="padding:8px 14px;" onclick="ovAdjCount('s',1)">+</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="btn-row" style="flex-direction:column;gap:8px;">
       <button class="btn btn-yellow btn-full" onclick="ovEndInning()">End Inning (3 outs now)</button>
       <button class="btn btn-green  btn-full" onclick="ovAddRunner()">Add Runner to Base</button>
@@ -1342,8 +1363,20 @@ function logPitch() {
     _paFlash = { outcome: 'HBP', count: state.pitchNumPA };
     endPA();
   } else if (result === 'WP' || result === 'PB') {
-    // Pitch recorded, PA continues, optional runner advance
+    // Pitch recorded, PA continues. If runners are on, prompt to advance them
+    // (a WP/PB usually moves runners up; a runner on 3rd typically scores).
     pitch.pa_outcome = null;
+    const prevRunners = [...state.runners];
+    if (prevRunners.some(Boolean)) {
+      state.pitches.push(pitch);
+      autoSave();
+      updateUI();
+      showRunnerModal(result, prevRunners, () => {
+        resetPitchSelections();
+        updateUI(); autoSave();
+      });
+      return;   // runner modal + its callback finish this pitch
+    }
     resetPitchSelections();
   }
 
@@ -1506,6 +1539,10 @@ function calcDefaultBases(outcome, prevRunners) {
       b[0] = true;
       return { bases: b };
     }
+    case 'WP':
+    case 'PB':
+      // Runners advance one base; batter stays at the plate (PA continues)
+      return { bases: [false, !!r[0], !!r[1]] };
     default:
       return { bases: [...r] };
   }
@@ -1519,6 +1556,8 @@ function defaultRunsFor(outcome, prevRunners) {
     case '3B': return r.filter(Boolean).length;
     case 'SAC': return r[2] ? 1 : 0;
     case 'E': return r[2] ? 1 : 0;
+    case 'WP': return r[2] ? 1 : 0;   // runner from 3rd scores on WP/PB
+    case 'PB': return r[2] ? 1 : 0;
     default: return 0;
   }
 }
@@ -1660,8 +1699,21 @@ function undoLastPitch() {
 //  OVERRIDE MODAL
 // ═══════════════════════════════════════════════════════════════════════════
 
-function openOverrideModal()  { document.getElementById('override-modal').classList.remove('hidden'); }
+function openOverrideModal()  {
+  document.getElementById('ov-balls').textContent   = state.balls;
+  document.getElementById('ov-strikes').textContent = state.strikes;
+  document.getElementById('override-modal').classList.remove('hidden');
+}
 function closeOverrideModal() { document.getElementById('override-modal').classList.add('hidden'); }
+
+function ovAdjCount(which, delta) {
+  // Fix a wrong count. Balls clamp 0-3, strikes 0-2 (a live pre-pitch count).
+  if (which === 'b') state.balls   = Math.max(0, Math.min(3, state.balls + delta));
+  else               state.strikes = Math.max(0, Math.min(2, state.strikes + delta));
+  document.getElementById('ov-balls').textContent   = state.balls;
+  document.getElementById('ov-strikes').textContent = state.strikes;
+  updateUI(); autoSave();
+}
 
 function ovEndInning() {
   closeOverrideModal();
@@ -2092,17 +2144,17 @@ async function resumeSession(sessionId) {
   const today = new Date().toISOString().slice(0, 10);
   document.getElementById('setup-date').value = today;
 
-  // Populate game velocity dropdown 60-105
+  // Populate game velocity dropdown 105 down to 60 (high end first)
   const vs = document.getElementById('vel-select');
-  for (let v = 60; v <= 105; v++) {
+  for (let v = 105; v >= 60; v--) {
     const opt = document.createElement('option');
     opt.value = v; opt.textContent = v;
     vs.appendChild(opt);
   }
 
-  // Populate session velocity dropdown 60-105
+  // Populate session velocity dropdown 105 down to 60
   const svs = document.getElementById('ses-vel-select');
-  for (let v = 60; v <= 105; v++) {
+  for (let v = 105; v >= 60; v--) {
     const opt = document.createElement('option');
     opt.value = v; opt.textContent = v;
     if (v === 85) opt.selected = true;
