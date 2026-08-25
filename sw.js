@@ -1,6 +1,6 @@
 // HCC Chart offline keeper — cache-first so the app opens with no internet,
 // background-refresh so updates arrive when internet happens to exist.
-const CACHE = "hcc-chart-v6";
+const CACHE = "hcc-chart-v7";
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) =>
