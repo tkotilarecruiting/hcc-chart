@@ -938,7 +938,7 @@ function newGameState() {
 function curHalf()       { return (state.inning % 2 === 1) ? 'top' : 'bottom'; }
 function curRealInning() { return Math.ceil(state.inning / 2); }
 function battingTeam()   { return curHalf() === 'top' ? state.awayTeam : state.homeTeam; }
-function fieldingIsHome(){ return curHalf() === 'top'; }   // home pitches the tops
+function fieldingTeam()  { return curHalf() === 'top' ? state.homeTeam : state.awayTeam; }  // pitches this half
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  INDEXEDDB — GAME STORAGE
@@ -1194,6 +1194,7 @@ function startGame() {
       state.homeTeam = { name: (document.getElementById('home-name').value.trim() || 'Home'),
                          ours: document.getElementById('home-ours').checked, lineup: hLU, pos: 0 };
       setCurrentBatter();   // first batter = away leadoff (top 1)
+      setHalfPitcher();     // top 1: home fields — auto "Opponent" if they aren't ours
     }
   }
 
@@ -1210,7 +1211,8 @@ function startGame() {
 function updatePitcherDatalist() {
   const sel = document.getElementById('pm-name');
   sel.innerHTML = '<option value="">— Select Pitcher —</option>' +
-    ROSTER.map(n => `<option value="${n}">${n}</option>`).join('');
+    ROSTER.map(n => `<option value="${n}">${n}</option>`).join('') +
+    '<option value="Opponent">Opponent (not tracked)</option>';
 }
 
 function openPitcherModal() {
@@ -1603,10 +1605,11 @@ function endPA() {
 
 function endInning() {
   if (state.lineupMode) {
-    // Save the pitcher who finished this half, and advance the batter who
-    // just completed (unless the inning ended on the bases → carryover).
+    // Save the pitcher who finished this half (only if it's one of ours), and
+    // advance the batter who just completed (unless the inning ended on the
+    // bases → carryover).
     const wasTop = curHalf() === 'top';
-    if (state.pitcher) {
+    if (state.pitcher && state.pitcher.name !== 'Opponent') {
       state[wasTop ? 'homePitcher' : 'awayPitcher'] =
         { name: state.pitcher.name, count: state.pitcherPitchCount };
     }
@@ -1624,13 +1627,23 @@ function endInning() {
   _inEndInning = false;
 
   if (state.lineupMode) {
-    // Restore the pitcher who fields the new half (persists across their halves).
-    const nowTop = curHalf() === 'top';
-    const saved  = state[nowTop ? 'homePitcher' : 'awayPitcher'];
-    state.pitcher = saved ? { name: saved.name } : null;
-    state.pitcherPitchCount = saved ? saved.count : 0;
-    setCurrentBatter();              // leadoff batter of the new batting team
+    setHalfPitcher();               // opponent auto, or restore our persisted arm
+    setCurrentBatter();             // leadoff batter of the new batting team
   }
+}
+
+// Set the pitcher for the current half: if the fielding team isn't ours, it's
+// the untracked "Opponent"; otherwise restore that half's persisted pitcher.
+function setHalfPitcher() {
+  if (!fieldingTeam().ours) {
+    state.pitcher = { name: 'Opponent' };
+    state.pitcherPitchCount = 0;
+    return;
+  }
+  const nowTop = curHalf() === 'top';
+  const saved  = state[nowTop ? 'homePitcher' : 'awayPitcher'];
+  state.pitcher = saved ? { name: saved.name } : null;
+  state.pitcherPitchCount = saved ? saved.count : 0;
 }
 
 function resetPitchSelections() {
@@ -2078,6 +2091,14 @@ function updateUI() {
   } else {
     document.getElementById('pitcher-name').textContent = '— Select Pitcher —';
     document.getElementById('pitcher-sub').textContent  = 'Tap Change Pitcher';
+  }
+
+  // Auto-reflect the current batter's hand on the L/R buttons
+  const _lhh = document.getElementById('btn-lhh');
+  const _rhh = document.getElementById('btn-rhh');
+  if (_lhh && _rhh) {
+    _lhh.classList.toggle('selected', state.batterHand === 'L');
+    _rhh.classList.toggle('selected', state.batterHand === 'R');
   }
 
   // Batter / PA info
