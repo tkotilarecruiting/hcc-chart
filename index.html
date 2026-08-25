@@ -823,13 +823,15 @@ select option { background: var(--card); }
 //  GAME STATE
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Synced from the dashboard roster (source of truth). Regenerate with sync_roster.py.
 const ROSTER = [
-  "A. Seepersaud","B. Greenfield","B. Keeney","C. Ford",
-  "M. Villafuerte","J. Perkowski","K. Parker","C. Weegans",
-  "C. Hathaway","B. Dospel","R. Buttita","B. Wiersema",
-  "J. Habel","A. Cassatta","M. Owen","A. Katz",
-  "P. Verzin","J. Uscenga","M. Zylstra","K. Fielder",
-  "A. Loney","J. Hansen","G. Last","G. Kanters",
+  "A. Cassatta", "A. Katz", "A. Loney", "A. Seepersaud",
+  "B. Dospel", "B. Greenfield", "B. Keeney", "B. Wiersema",
+  "C. Akins", "C. Ford", "C. Hathaway", "C. Robertson",
+  "C. Weegens", "D. Ludwig", "G. Kanters", "G. Last",
+  "J. Habel", "J. Hansen", "J. Perkowski", "J. Uscanga",
+  "K. Fiedler", "M. Owen", "M. Villafuerte", "M. Zylstra",
+  "P. Verzin", "R. Butitta", "W. Auker",
 ];
 
 let state = newGameState();
@@ -861,6 +863,7 @@ function newGameState() {
     selPitchType: null,
     selZone:    null,
     velocity:   null,
+    lastVelo:   null,   // last thrown velo — used to pre-fill the velo picker
     selResult:  null,
     selContact: null,
     selOutcome: null,
@@ -1224,6 +1227,7 @@ function logPitch() {
   state.pitchNumGame++;
   state.pitchNumPA++;
   state.pitcherPitchCount++;
+  if (state.velocity != null) state.lastVelo = state.velocity;  // default for next pitch
 
   const isFirstPitch = state.pitchNumPA === 1;
   const twoOut       = state.outs === 2;
@@ -1460,7 +1464,6 @@ function endInning() {
 
 function resetPitchSelections() {
   state.selZone    = null;
-  state.velocity   = null;
   state.selResult  = null;
   state.selContact = null;
   state.selOutcome = null;
@@ -1469,9 +1472,11 @@ function resetPitchSelections() {
   document.getElementById('outcome-section').classList.add('hidden');
   document.querySelectorAll('#contact-row .btn, #outcome-row .btn, #outcome-row-2 .btn').forEach(b => b.classList.remove('selected'));
   document.querySelectorAll('#zone-grid .zc').forEach(el => el.classList.remove('z-sel'));
-  state.velocity = null;
+  // Default the velo picker to the last thrown velo so the charter barely scrolls.
+  // It's pre-selected (so an untouched pitch records last velo); change it any time.
+  state.velocity = state.lastVelo;
   const vs = document.getElementById('vel-select');
-  if (vs) vs.value = '';
+  if (vs) vs.value = state.lastVelo != null ? String(state.lastVelo) : '';
 }
 
 function clearSelections() {
@@ -1790,6 +1795,7 @@ function confirmPitcherChange() {
 
   state.pitcher           = { name };
   state.pitcherPitchCount = 0;
+  state.lastVelo          = null;   // new pitcher starts with a blank velo default
   state.inheritedRunners  = ir;
   state.paId++;
   state.pitchNumPA = 0;
@@ -1877,7 +1883,7 @@ function updateUI() {
   outsEl.className   = 'sb-val' + (state.outs === 2 ? ' danger' : '');
   document.getElementById('sb-runs').textContent    = state.runsAllowed || 0;
   document.getElementById('sb-count').textContent   = `${state.balls}-${state.strikes}`;
-  document.getElementById('sb-pitches').textContent = state.pitchNumGame;
+  document.getElementById('sb-pitches').textContent = state.pitcherPitchCount;
 
   // Diamond
   document.getElementById('base-1b').className = 'base' + (state.runners[0] ? ' on' : '');
@@ -2144,17 +2150,17 @@ async function resumeSession(sessionId) {
   const today = new Date().toISOString().slice(0, 10);
   document.getElementById('setup-date').value = today;
 
-  // Populate game velocity dropdown 105 down to 60 (high end first)
+  // Populate game velocity dropdown 95 down to 60 (high end first)
   const vs = document.getElementById('vel-select');
-  for (let v = 105; v >= 60; v--) {
+  for (let v = 95; v >= 60; v--) {
     const opt = document.createElement('option');
     opt.value = v; opt.textContent = v;
     vs.appendChild(opt);
   }
 
-  // Populate session velocity dropdown 105 down to 60
+  // Populate session velocity dropdown 95 down to 60
   const svs = document.getElementById('ses-vel-select');
-  for (let v = 105; v >= 60; v--) {
+  for (let v = 95; v >= 60; v--) {
     const opt = document.createElement('option');
     opt.value = v; opt.textContent = v;
     if (v === 85) opt.selected = true;
