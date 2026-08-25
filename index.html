@@ -467,6 +467,41 @@ select option { background: var(--card); }
     </select>
   </div>
 
+  <!-- Full-game lineup entry (optional) -->
+  <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin:8px 0;">
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600;">
+      <input type="checkbox" id="setup-track-hitters" onchange="toggleLineupEntry()"
+             style="width:20px;height:20px;">
+      Track hitters (full game)
+    </label>
+    <p style="font-size:0.72rem;color:#6a7a8a;margin:6px 0 0;">
+      Enter batting orders so hitters are captured automatically. Leave off for
+      pitching-only charting.</p>
+
+    <div id="lineup-entry" class="hidden" style="margin-top:12px;">
+      <div style="margin-bottom:14px;">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+          <input type="text" id="away-name" value="Away" placeholder="Away team"
+                 style="flex:1;font-weight:700;">
+          <label style="font-size:0.72rem;display:flex;align-items:center;gap:4px;">
+            <input type="checkbox" id="away-ours" checked> ours</label>
+        </div>
+        <div style="font-size:0.68rem;color:#6a7a8a;margin-bottom:4px;">Bats first (tops) · order 1-9</div>
+        <div id="away-lineup"></div>
+      </div>
+      <div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+          <input type="text" id="home-name" value="Home" placeholder="Home team"
+                 style="flex:1;font-weight:700;">
+          <label style="font-size:0.72rem;display:flex;align-items:center;gap:4px;">
+            <input type="checkbox" id="home-ours" checked> ours</label>
+        </div>
+        <div style="font-size:0.68rem;color:#6a7a8a;margin-bottom:4px;">Bats second (bottoms) · order 1-9</div>
+        <div id="home-lineup"></div>
+      </div>
+    </div>
+  </div>
+
   <button class="btn btn-orange btn-full" onclick="startGame()">Start Charting</button>
 
   <hr class="divider" style="margin:20px 0">
@@ -556,6 +591,8 @@ select option { background: var(--card); }
     <button class="btn btn-blue btn-hand" id="btn-lhh" onclick="setBatterHand('L')">LHH</button>
     <button class="btn btn-red  btn-hand" id="btn-rhh" onclick="setBatterHand('R')">RHH</button>
     <span class="pa-info" id="pa-info">PA#0 · Pitch#0</span>
+    <button class="btn btn-dark btn-sm" id="btn-edit-lineup" onclick="openLineupModal()"
+            style="margin-left:auto;display:none;">✎ Lineup</button>
   </div>
 
   <div class="divider"></div>
@@ -705,6 +742,23 @@ select option { background: var(--card); }
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
+<!--  LINEUP EDIT MODAL (pinch hitters / subs)                       -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="lineup-modal" class="overlay hidden">
+  <div class="modal" style="max-height:85vh;overflow-y:auto;">
+    <h2>✎ Edit Lineups</h2>
+    <p style="font-size:0.72rem;color:#6a7a8a;margin-bottom:10px;">
+      Swap a hitter into any spot (pinch hitter / sub). The order position stays;
+      the new hitter bats from here on. <b>*</b> = at bat now.</p>
+    <div id="lineup-modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-orange" style="flex:2;" onclick="saveLineupEdit()">Save</button>
+      <button class="btn btn-ghost"  style="flex:1;" onclick="closeLineupModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
 <!--  OVERRIDE MODAL                                                 -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <div id="override-modal" class="overlay hidden">
@@ -834,6 +888,19 @@ const ROSTER = [
   "P. Verzin", "R. Butitta", "W. Auker",
 ];
 
+// Hitter roster (synced from dashboard). Regenerate with sync_roster.py.
+const HITTERS = [
+  {n:"A. Eder",b:"S"}, {n:"A. Trujillo",b:"R"}, {n:"C. Akins",b:"L"},
+  {n:"D. Ludwig",b:"R"}, {n:"E. Thompson",b:"L"}, {n:"F. McMillan",b:"R"},
+  {n:"F. Soto",b:"R"}, {n:"G. Kanters",b:"L"}, {n:"G. Lesslie",b:"R"},
+  {n:"G. Wolfe",b:"R"}, {n:"H. Powers",b:"L"}, {n:"J. Banton",b:"L"},
+  {n:"J. Leblanc",b:"R"}, {n:"J. Thomson",b:"R"}, {n:"K. Erdmann",b:"R"},
+  {n:"K. Fredenburg",b:"R"}, {n:"K. Hampton",b:"L"}, {n:"N. Anastas",b:"R"},
+  {n:"N. Firle",b:"L"}, {n:"O. Donelle",b:"L"}, {n:"O. Nadeau",b:"L"},
+  {n:"P. Verzin",b:"R"}, {n:"T. Seghers",b:"R"}, {n:"W. Auker",b:"R"},
+  {n:"W. Melendez",b:"R"}, {n:"Z. Haahn",b:"R"},
+];
+
 let state = newGameState();
 
 function newGameState() {
@@ -872,10 +939,25 @@ function newGameState() {
     twoStrikeCountWasZeroTwo: false,
     // Run tracking
     runsAllowed: 0,
+    // ── Full-game / lineup mode (optional) ──────────────────────────────
+    lineupMode: false,           // true once lineups are entered at setup
+    // inning counts half-innings (1=top1, 2=bot1, 3=top2 ...); derive half/real:
+    //   half = inning is odd ? 'top' : 'bottom' ; realInning = ceil(inning/2)
+    awayTeam: { name: 'Away', ours: true, lineup: [], pos: 0 },  // bats the tops
+    homeTeam: { name: 'Home', ours: true, lineup: [], pos: 0 },  // bats the bottoms
+    homePitcher: null,           // fields/pitches the tops
+    awayPitcher: null,           // fields/pitches the bottoms
+    batter: null,                // current batter {n,b} when lineupMode, else null
     // All logged pitches
     pitches:    [],
   };
 }
+
+// ── Half-inning helpers ────────────────────────────────────────────────────────
+function curHalf()       { return (state.inning % 2 === 1) ? 'top' : 'bottom'; }
+function curRealInning() { return Math.ceil(state.inning / 2); }
+function battingTeam()   { return curHalf() === 'top' ? state.awayTeam : state.homeTeam; }
+function fieldingTeam()  { return curHalf() === 'top' ? state.homeTeam : state.awayTeam; }  // pitches this half
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  INDEXEDDB — GAME STORAGE
@@ -1051,6 +1133,118 @@ async function confirmDeleteGame(gameId) {
 //  GAME SETUP
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ── Lineup entry (setup) ────────────────────────────────────────────────────
+function toggleLineupEntry() {
+  const on = document.getElementById('setup-track-hitters').checked;
+  const el = document.getElementById('lineup-entry');
+  el.classList.toggle('hidden', !on);
+  if (on && !el.dataset.built) { buildLineupSelectors(); el.dataset.built = '1'; }
+}
+
+function buildLineupSelectors() {
+  const opts = '<option value="">—</option>' +
+    HITTERS.map(h => `<option value="${h.n}">${h.n} (${h.b})</option>`).join('');
+  for (const side of ['away', 'home']) {
+    let html = '';
+    for (let i = 1; i <= 9; i++) {
+      html += `<div style="display:flex;align-items:center;gap:8px;margin:3px 0;">
+        <span style="width:16px;color:#6a7a8a;font-size:0.8rem;">${i}</span>
+        <select id="${side}-spot-${i}" style="flex:1;">${opts}</select></div>`;
+    }
+    document.getElementById(side + '-lineup').innerHTML = html;
+  }
+}
+
+function readLineup(side) {
+  const lu = [];
+  for (let i = 1; i <= 9; i++) {
+    const name = document.getElementById(`${side}-spot-${i}`).value;
+    if (name) {
+      const h = HITTERS.find(x => x.n === name);
+      lu.push({ n: name, b: h ? h.b : 'R' });
+    }
+  }
+  return lu;
+}
+
+// ── Current batter / order helpers ──────────────────────────────────────────
+function setCurrentBatter() {
+  if (!state.lineupMode) { state.batter = null; return; }
+  const t = battingTeam();
+  if (t.ours && t.lineup.length) {
+    state.batter = t.lineup[t.pos % t.lineup.length];
+    // Auto-set hand for non-switch hitters; switch hitters pick L/R manually
+    state.batterHand = (state.batter.b === 'S') ? null : state.batter.b;
+  } else {
+    state.batter = null;          // opponent team → manual L/R
+    state.batterHand = null;
+  }
+}
+
+let _carryBatter = false;   // set when an inning ends on the bases (batter carries over)
+
+function advanceBatter() {
+  if (!state.lineupMode) return;
+  if (_carryBatter) { _carryBatter = false; return; }   // CS/pickoff — same batter next time
+  const t = battingTeam();
+  if (t.lineup.length) t.pos = (t.pos + 1) % t.lineup.length;
+}
+
+// ── Lineup edit (mid-game subs / pinch hitters) ─────────────────────────────
+function openLineupModal() {
+  if (!state.lineupMode) { alert('Lineups are only used in full-game mode.'); return; }
+  const opts = '<option value="">—</option>' +
+    HITTERS.map(h => `<option value="${h.n}">${h.n} (${h.b})</option>`).join('');
+  let html = '';
+  for (const side of ['away', 'home']) {
+    const t = (side === 'away') ? state.awayTeam : state.homeTeam;
+    if (!t.ours || !t.lineup.length) continue;
+    const curSpot = (battingTeam() === t) ? (t.pos % t.lineup.length) + 1 : 0;
+    html += `<div style="margin-bottom:14px;"><div style="font-weight:700;margin-bottom:4px;color:var(--white);">${t.name}</div>`;
+    for (let i = 1; i <= t.lineup.length; i++) {
+      const mark = (i === curSpot) ? '*' : '';
+      const clr  = (i === curSpot) ? 'color:var(--orange);font-weight:700;' : 'color:#6a7a8a;';
+      html += `<div style="display:flex;align-items:center;gap:8px;margin:3px 0;">
+        <span style="width:20px;font-size:0.8rem;${clr}">${i}${mark}</span>
+        <select id="edit-${side}-${i}" style="flex:1;">${opts}</select></div>`;
+    }
+    html += '</div>';
+  }
+  document.getElementById('lineup-modal-body').innerHTML = html;
+  // preselect current hitters
+  for (const side of ['away', 'home']) {
+    const t = (side === 'away') ? state.awayTeam : state.homeTeam;
+    if (!t.ours) continue;
+    for (let i = 1; i <= t.lineup.length; i++) {
+      const el = document.getElementById(`edit-${side}-${i}`);
+      if (el && t.lineup[i - 1]) el.value = t.lineup[i - 1].n;
+    }
+  }
+  document.getElementById('lineup-modal').classList.remove('hidden');
+}
+
+function closeLineupModal() { document.getElementById('lineup-modal').classList.add('hidden'); }
+
+function saveLineupEdit() {
+  for (const side of ['away', 'home']) {
+    const t = (side === 'away') ? state.awayTeam : state.homeTeam;
+    if (!t.ours || !t.lineup.length) continue;
+    for (let i = 1; i <= t.lineup.length; i++) {
+      const el = document.getElementById(`edit-${side}-${i}`);
+      if (!el) continue;
+      const name = el.value;
+      if (name) {
+        const h = HITTERS.find(x => x.n === name);
+        t.lineup[i - 1] = { n: name, b: h ? h.b : 'R' };
+      }
+    }
+  }
+  closeLineupModal();
+  setCurrentBatter();   // refresh in case the at-bat spot was swapped
+  updateUI();
+  autoSave();
+}
+
 function startGame() {
   const opp  = document.getElementById('setup-opponent').value.trim();
   const dt   = document.getElementById('setup-date').value;
@@ -1064,11 +1258,23 @@ function startGame() {
   state.location = loc;
   state.gameId   = `hcc_${dt.replace(/-/g,'')}vs${opp.replace(/\s+/g,'').slice(0,12).toUpperCase()}`;
 
+  // Full-game lineup mode (optional)
+  if (document.getElementById('setup-track-hitters').checked) {
+    const aLU = readLineup('away'), hLU = readLineup('home');
+    if (aLU.length || hLU.length) {
+      state.lineupMode = true;
+      state.awayTeam = { name: (document.getElementById('away-name').value.trim() || 'Away'),
+                         ours: document.getElementById('away-ours').checked, lineup: aLU, pos: 0 };
+      state.homeTeam = { name: (document.getElementById('home-name').value.trim() || 'Home'),
+                         ours: document.getElementById('home-ours').checked, lineup: hLU, pos: 0 };
+      setCurrentBatter();   // first batter = away leadoff (top 1)
+      setHalfPitcher();     // top 1: home fields — auto "Opponent" if they aren't ours
+    }
+  }
+
   updatePitcherDatalist();
   showMain();
   updateUI();
-
-  // Auto-save on first load
   autoSave();
 }
 
@@ -1079,7 +1285,8 @@ function startGame() {
 function updatePitcherDatalist() {
   const sel = document.getElementById('pm-name');
   sel.innerHTML = '<option value="">— Select Pitcher —</option>' +
-    ROSTER.map(n => `<option value="${n}">${n}</option>`).join('');
+    ROSTER.map(n => `<option value="${n}">${n}</option>`).join('') +
+    '<option value="Opponent">Opponent (not tracked)</option>';
 }
 
 function openPitcherModal() {
@@ -1245,6 +1452,10 @@ function logPitch() {
     pitcher:                    state.pitcher.name,
     pa_id:                      state.paId,
     inning:                     state.inning,
+    half:                       state.lineupMode ? curHalf() : null,
+    real_inning:                state.lineupMode ? curRealInning() : state.inning,
+    batter:                     state.batter ? state.batter.n : null,
+    batting_team:               state.lineupMode ? battingTeam().name : null,
     batter_hand:                state.batterHand,
     balls:                      state.balls,
     strikes:                    state.strikes,
@@ -1429,6 +1640,8 @@ function toggleZoneGrid() {
   icon.textContent = nowHidden ? '▾' : '▴';
 }
 
+let _inEndInning = false;
+
 function endPA() {
   const flash = _paFlash;
   _paFlash = undefined;
@@ -1447,19 +1660,64 @@ function endPA() {
   document.getElementById('btn-lhh').classList.remove('selected');
   document.getElementById('btn-rhh').classList.remove('selected');
 
+  // Lineup mode: for a normal same-half PA, advance to the next batter.
+  // (Inning-ending PAs are handled in endInning after the half flips.)
+  if (state.lineupMode && !_inEndInning) {
+    advanceBatter();
+    setCurrentBatter();
+  }
+
   if (state.pitcher && flash !== undefined) {
-    showNewBatterPrompt(flash);
+    // Tracked batter with a known hand needs no L/R prompt — just refresh.
+    if (state.lineupMode && state.batter && state.batterHand) {
+      updateUI();
+    } else {
+      showNewBatterPrompt(flash);
+    }
   }
 }
 
 function endInning() {
-  state.inning++;
+  if (state.lineupMode) {
+    // Save the pitcher who finished this half (only if it's one of ours), and
+    // advance the batter who just completed (unless the inning ended on the
+    // bases → carryover).
+    const wasTop = curHalf() === 'top';
+    if (state.pitcher && state.pitcher.name !== 'Opponent') {
+      state[wasTop ? 'homePitcher' : 'awayPitcher'] =
+        { name: state.pitcher.name, count: state.pitcherPitchCount };
+    }
+    advanceBatter();
+  }
+
+  _inEndInning = true;
+  state.inning++;                    // flips top ↔ bottom
   state.outs      = 0;
   state.runners   = [false, false, false];
   state.inheritedRunners   = 0;
   state.remainingInherited = 0;
   endPA();
   state.isLeadoff = true;  // after endPA() so it isn't clobbered
+  _inEndInning = false;
+
+  if (state.lineupMode) {
+    setHalfPitcher();               // opponent auto, or restore our persisted arm
+    setCurrentBatter();             // leadoff batter of the new batting team
+  }
+}
+
+// Set the pitcher for the current half: if the fielding team isn't ours, it's
+// the untracked "Opponent"; otherwise restore that half's persisted pitcher.
+function setHalfPitcher() {
+  if (!fieldingTeam().ours) {
+    state.pitcher = { name: 'Opponent' };
+    state.pitcherPitchCount = 0;
+    return;
+  }
+  const nowTop = curHalf() === 'top';
+  const saved  = state[nowTop ? 'homePitcher' : 'awayPitcher'];
+  state.pitcher = saved ? { name: saved.name } : null;
+  state.pitcherPitchCount = saved ? saved.count : 0;
 }
 
 function resetPitchSelections() {
@@ -1638,7 +1896,7 @@ function logSB(success) {
       if (state.runners[i]) { state.runners[i] = false; break; }
     }
     state.outs++;
-    if (state.outs >= 3) { _paFlash = null; endInning(); }
+    if (state.outs >= 3) { _paFlash = null; _carryBatter = true; endInning(); }
   }
 
   autoSave();
@@ -1843,6 +2101,13 @@ function exportGame() {
     date:     state.date,
     opponent: state.opponent,
     location: state.location,
+    lineup_mode: state.lineupMode,
+    teams: state.lineupMode ? {
+      away: { name: state.awayTeam.name, ours: state.awayTeam.ours,
+              lineup: state.awayTeam.lineup },
+      home: { name: state.homeTeam.name, ours: state.homeTeam.ours,
+              lineup: state.homeTeam.lineup },
+    } : null,
     pitches:  state.pitches,
   };
   const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -1876,8 +2141,10 @@ function updateUI() {
   document.getElementById('hdr-game-info').textContent =
     state.gameId ? `${state.date} vs ${state.opponent}` : '—';
 
-  // Scoreboard
-  document.getElementById('sb-inning').textContent  = state.inning;
+  // Scoreboard — show Top/Bot + real inning in lineup mode, else the raw counter
+  document.getElementById('sb-inning').textContent = state.lineupMode
+    ? `${curHalf() === 'top' ? '▲' : '▼'}${curRealInning()}`
+    : state.inning;
   const outsEl = document.getElementById('sb-outs');
   outsEl.textContent = state.outs;
   outsEl.className   = 'sb-val' + (state.outs === 2 ? ' danger' : '');
@@ -1900,9 +2167,30 @@ function updateUI() {
     document.getElementById('pitcher-sub').textContent  = 'Tap Change Pitcher';
   }
 
+  // Show the Lineup edit button only in full-game mode
+  const _elb = document.getElementById('btn-edit-lineup');
+  if (_elb) _elb.style.display = state.lineupMode ? '' : 'none';
+
+  // Auto-reflect the current batter's hand on the L/R buttons
+  const _lhh = document.getElementById('btn-lhh');
+  const _rhh = document.getElementById('btn-rhh');
+  if (_lhh && _rhh) {
+    _lhh.classList.toggle('selected', state.batterHand === 'L');
+    _rhh.classList.toggle('selected', state.batterHand === 'R');
+  }
+
   // Batter / PA info
-  document.getElementById('pa-info').textContent =
-    `PA#${state.paId + 1} · Pitch#${state.pitchNumPA}`;
+  if (state.lineupMode && state.batter) {
+    const t = battingTeam();
+    document.getElementById('pa-info').textContent =
+      `AT BAT: ${state.batter.n} (${state.batterHand || state.batter.b}) · ${t.name} #${(t.pos % 9) + 1}`;
+  } else if (state.lineupMode && !battingTeam().ours) {
+    document.getElementById('pa-info').textContent =
+      `${battingTeam().name} batting (opp) · pick L/R`;
+  } else {
+    document.getElementById('pa-info').textContent =
+      `PA#${state.paId + 1} · Pitch#${state.pitchNumPA}`;
+  }
 
   // Recent pitches log
   renderPitchLog();
