@@ -731,6 +731,10 @@ select option { background: var(--card); }
       <select id="pm-name"></select>
     </div>
     <div class="form-group">
+      <label>Throws <span style="color:#5a7a8a;font-size:0.7rem;">(mainly for Opponent — ours auto-fill)</span></label>
+      <select id="pm-throws"><option value="R">R</option><option value="L">L</option></select>
+    </div>
+    <div class="form-group">
       <label>Inherited Runners</label>
       <input type="number" id="pm-ir" min="0" max="3" value="0">
     </div>
@@ -922,6 +926,7 @@ function newGameState() {
     pitchNumPA: 0,
     // Current pitcher
     pitcher:    null,
+    pitcherHand: null,   // R/L — mainly for opponent pitchers (ours come from roster)
     pitcherPitchCount: 0,
     inheritedRunners: 0,
     inheritedRunsScored: 0,
@@ -1247,11 +1252,20 @@ function saveLineupEdit() {
 }
 
 function startGame() {
-  const opp  = document.getElementById('setup-opponent').value.trim();
-  const dt   = document.getElementById('setup-date').value;
-  const loc  = document.getElementById('setup-location').value;
+  let   opp = document.getElementById('setup-opponent').value.trim();
+  const dt  = document.getElementById('setup-date').value;
+  const loc = document.getElementById('setup-location').value;
+  const trackHitters = document.getElementById('setup-track-hitters').checked;
 
-  if (!opp || !dt) { alert('Please enter opponent and date.'); return; }
+  // For a tracked-lineup game (e.g. intrasquad), a blank opponent is fine —
+  // default it from the team names so the game (and lineups) still save.
+  if (!opp && trackHitters) {
+    const an = document.getElementById('away-name').value.trim() || 'Away';
+    const hn = document.getElementById('home-name').value.trim() || 'Home';
+    opp = `${an} vs ${hn}`;
+  }
+  if (!dt)  { alert('Please pick a date.'); return; }
+  if (!opp) { alert('Enter an opponent (or turn on Track hitters and name the teams).'); return; }
 
   state = newGameState();
   state.opponent = opp;
@@ -1458,6 +1472,9 @@ function logPitch() {
     batter:                     state.batter ? state.batter.n : null,
     batting_team:               state.lineupMode ? battingTeam().name : null,
     batter_hand:                state.batterHand,
+    pitcher_hand:               state.pitcherHand || null,
+    runners_on:                 state.runners.filter(Boolean).length,
+    risp:                       (state.runners[1] || state.runners[2]) ? 1 : 0,
     balls:                      state.balls,
     strikes:                    state.strikes,
     outs:                       state.outs,
@@ -2043,6 +2060,7 @@ function openPitcherModal() {
   updatePitcherDatalist();
   const name = state.pitcher ? state.pitcher.name : '';
   document.getElementById('pm-name').value = name;
+  document.getElementById('pm-throws').value = state.pitcherHand || 'R';
   const ir = state.runners.filter(Boolean).length;
   document.getElementById('pm-ir').value = ir;
   document.getElementById('pitcher-modal').classList.remove('hidden');
@@ -2058,6 +2076,7 @@ function confirmPitcherChange() {
   if (!name) { alert('Select a pitcher.'); return; }
 
   state.pitcher           = { name };
+  state.pitcherHand       = document.getElementById('pm-throws').value || null;
   state.pitcherPitchCount = 0;
   state.lastVelo          = null;   // new pitcher starts with a blank velo default
   state.inheritedRunners  = ir;
@@ -2096,7 +2115,7 @@ function autoSave() {
       inning: state.inning, outs: state.outs, balls: state.balls, strikes: state.strikes,
       runners: state.runners, isLeadoff: state.isLeadoff,
       paId: state.paId, pitchNumPA: state.pitchNumPA, pitchNumGame: state.pitchNumGame,
-      pitcher: state.pitcher, pitcherPitchCount: state.pitcherPitchCount,
+      pitcher: state.pitcher, pitcherHand: state.pitcherHand, pitcherPitchCount: state.pitcherPitchCount,
       inheritedRunners: state.inheritedRunners, inheritedRunsScored: state.inheritedRunsScored,
       remainingInherited: state.remainingInherited, batterHand: state.batterHand,
       runsAllowed: state.runsAllowed, lastVelo: state.lastVelo,
