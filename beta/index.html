@@ -591,6 +591,8 @@ select option { background: var(--card); }
     <button class="btn btn-blue btn-hand" id="btn-lhh" onclick="setBatterHand('L')">LHH</button>
     <button class="btn btn-red  btn-hand" id="btn-rhh" onclick="setBatterHand('R')">RHH</button>
     <span class="pa-info" id="pa-info">PA#0 · Pitch#0</span>
+    <button class="btn btn-dark btn-sm" id="btn-edit-lineup" onclick="openLineupModal()"
+            style="margin-left:auto;display:none;">✎ Lineup</button>
   </div>
 
   <div class="divider"></div>
@@ -735,6 +737,23 @@ select option { background: var(--card); }
     <div class="modal-footer">
       <button class="btn btn-orange" style="flex:2;" onclick="confirmPitcherChange()">Confirm</button>
       <button class="btn btn-ghost"  style="flex:1;" onclick="closePitcherModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!--  LINEUP EDIT MODAL (pinch hitters / subs)                       -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="lineup-modal" class="overlay hidden">
+  <div class="modal" style="max-height:85vh;overflow-y:auto;">
+    <h2>✎ Edit Lineups</h2>
+    <p style="font-size:0.72rem;color:#6a7a8a;margin-bottom:10px;">
+      Swap a hitter into any spot (pinch hitter / sub). The order position stays;
+      the new hitter bats from here on. <b>*</b> = at bat now.</p>
+    <div id="lineup-modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-orange" style="flex:2;" onclick="saveLineupEdit()">Save</button>
+      <button class="btn btn-ghost"  style="flex:1;" onclick="closeLineupModal()">Cancel</button>
     </div>
   </div>
 </div>
@@ -1169,6 +1188,61 @@ function advanceBatter() {
   if (_carryBatter) { _carryBatter = false; return; }   // CS/pickoff — same batter next time
   const t = battingTeam();
   if (t.lineup.length) t.pos = (t.pos + 1) % t.lineup.length;
+}
+
+// ── Lineup edit (mid-game subs / pinch hitters) ─────────────────────────────
+function openLineupModal() {
+  if (!state.lineupMode) { alert('Lineups are only used in full-game mode.'); return; }
+  const opts = '<option value="">—</option>' +
+    HITTERS.map(h => `<option value="${h.n}">${h.n} (${h.b})</option>`).join('');
+  let html = '';
+  for (const side of ['away', 'home']) {
+    const t = (side === 'away') ? state.awayTeam : state.homeTeam;
+    if (!t.ours || !t.lineup.length) continue;
+    const curSpot = (battingTeam() === t) ? (t.pos % t.lineup.length) + 1 : 0;
+    html += `<div style="margin-bottom:14px;"><div style="font-weight:700;margin-bottom:4px;color:var(--white);">${t.name}</div>`;
+    for (let i = 1; i <= t.lineup.length; i++) {
+      const mark = (i === curSpot) ? '*' : '';
+      const clr  = (i === curSpot) ? 'color:var(--orange);font-weight:700;' : 'color:#6a7a8a;';
+      html += `<div style="display:flex;align-items:center;gap:8px;margin:3px 0;">
+        <span style="width:20px;font-size:0.8rem;${clr}">${i}${mark}</span>
+        <select id="edit-${side}-${i}" style="flex:1;">${opts}</select></div>`;
+    }
+    html += '</div>';
+  }
+  document.getElementById('lineup-modal-body').innerHTML = html;
+  // preselect current hitters
+  for (const side of ['away', 'home']) {
+    const t = (side === 'away') ? state.awayTeam : state.homeTeam;
+    if (!t.ours) continue;
+    for (let i = 1; i <= t.lineup.length; i++) {
+      const el = document.getElementById(`edit-${side}-${i}`);
+      if (el && t.lineup[i - 1]) el.value = t.lineup[i - 1].n;
+    }
+  }
+  document.getElementById('lineup-modal').classList.remove('hidden');
+}
+
+function closeLineupModal() { document.getElementById('lineup-modal').classList.add('hidden'); }
+
+function saveLineupEdit() {
+  for (const side of ['away', 'home']) {
+    const t = (side === 'away') ? state.awayTeam : state.homeTeam;
+    if (!t.ours || !t.lineup.length) continue;
+    for (let i = 1; i <= t.lineup.length; i++) {
+      const el = document.getElementById(`edit-${side}-${i}`);
+      if (!el) continue;
+      const name = el.value;
+      if (name) {
+        const h = HITTERS.find(x => x.n === name);
+        t.lineup[i - 1] = { n: name, b: h ? h.b : 'R' };
+      }
+    }
+  }
+  closeLineupModal();
+  setCurrentBatter();   // refresh in case the at-bat spot was swapped
+  updateUI();
+  autoSave();
 }
 
 function startGame() {
@@ -2092,6 +2166,10 @@ function updateUI() {
     document.getElementById('pitcher-name').textContent = '— Select Pitcher —';
     document.getElementById('pitcher-sub').textContent  = 'Tap Change Pitcher';
   }
+
+  // Show the Lineup edit button only in full-game mode
+  const _elb = document.getElementById('btn-edit-lineup');
+  if (_elb) _elb.style.display = state.lineupMode ? '' : 'none';
 
   // Auto-reflect the current batter's hand on the L/R buttons
   const _lhh = document.getElementById('btn-lhh');
