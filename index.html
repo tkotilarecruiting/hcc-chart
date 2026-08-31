@@ -279,6 +279,8 @@ select option { background: var(--card); }
   <div class="mode-title">HCC Pitch Charting</div>
   <div class="mode-sub">Cougars Fall 2026 · Select charting mode</div>
 
+  <div id="resume-banner" class="hidden" style="margin-bottom:6px;"></div>
+
   <button class="mode-btn primary" onclick="showSetup()">
     <span class="mb-icon">⚔</span>
     <span class="mb-label">GAME</span>
@@ -1039,8 +1041,8 @@ function _showOnly(id) {
   });
 }
 
-function showModeSelect()    { _showOnly('mode-select-screen'); }
-function showSetup()         { _showOnly('setup-screen'); }
+function showModeSelect()    { _showOnly('mode-select-screen'); refreshResumeBanner(); }
+function showSetup()         { _showOnly('setup-screen'); restoreSetupDraft(); }
 function showSessionSetup()  { _showOnly('session-setup-screen'); populateSessionPitcherList(); }
 function showSessionChart()  { _showOnly('session-chart-screen'); }
 
@@ -1138,6 +1140,83 @@ async function confirmDeleteGame(gameId) {
 // ═══════════════════════════════════════════════════════════════════════════
 //  GAME SETUP
 // ═══════════════════════════════════════════════════════════════════════════
+
+// ── Setup draft + resume: keep the setup form (lineups included) so it survives
+//    an app reload before the game is started (e.g. WiFi → field), and surface
+//    an in-progress game on the home screen so an iOS PWA kill never strands it.
+const SETUP_DRAFT_KEY = 'hcc_setup_draft';
+
+function saveSetupDraft() {
+  try {
+    const g = id => document.getElementById(id);
+    const d = {
+      opponent: g('setup-opponent').value, date: g('setup-date').value,
+      location: g('setup-location').value, track: g('setup-track-hitters').checked,
+      awayName: g('away-name').value, homeName: g('home-name').value,
+      awayOurs: g('away-ours').checked, homeOurs: g('home-ours').checked,
+      away: [], home: [],
+    };
+    for (const side of ['away', 'home'])
+      for (let i = 1; i <= 9; i++) {
+        const el = g(`${side}-spot-${i}`);
+        d[side].push(el ? el.value : '');
+      }
+    localStorage.setItem(SETUP_DRAFT_KEY, JSON.stringify(d));
+  } catch (e) {}
+}
+
+function restoreSetupDraft() {
+  let d = null;
+  try { d = JSON.parse(localStorage.getItem(SETUP_DRAFT_KEY) || 'null'); } catch (e) {}
+  if (!d) return;
+  const g = id => document.getElementById(id);
+  if (d.opponent) g('setup-opponent').value = d.opponent;
+  if (d.date)     g('setup-date').value     = d.date;
+  if (d.location) g('setup-location').value = d.location;
+  if (d.awayName) g('away-name').value = d.awayName;
+  if (d.homeName) g('home-name').value = d.homeName;
+  g('away-ours').checked = d.awayOurs !== false;
+  g('home-ours').checked = d.homeOurs !== false;
+  if (d.track) {
+    g('setup-track-hitters').checked = true;
+    toggleLineupEntry();                 // shows entry + builds the 9 selectors
+    for (const side of ['away', 'home'])
+      (d[side] || []).forEach((v, idx) => {
+        const el = g(`${side}-spot-${idx + 1}`);
+        if (el && v) el.value = v;
+      });
+  }
+}
+
+function clearSetupDraft() {
+  try { localStorage.removeItem(SETUP_DRAFT_KEY); } catch (e) {}
+}
+
+async function refreshResumeBanner() {
+  const el = document.getElementById('resume-banner');
+  if (!el) return;
+  let games = [];
+  try { games = await loadAllGames(); } catch (e) { return; }
+  const cutoff = Date.now() - 12 * 3600 * 1000;   // only "today's" in-progress game
+  const gms = games.filter(g =>
+    g.record_type !== 'session' &&
+    g.saved_at && Date.parse(g.saved_at) > cutoff &&
+    ((g.pitches && g.pitches.length) || g.lineup_mode));
+  if (!gms.length) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  gms.sort((a, b) => (b.saved_at || '').localeCompare(a.saved_at || ''));
+  const g = gms[0];
+  const btn = document.createElement('button');
+  btn.className = 'mode-btn';
+  btn.style.borderColor = 'var(--orange)';
+  btn.onclick = () => resumeGame(g.game_id);
+  const mk = (cls, txt) => { const s = document.createElement('span'); s.className = cls; s.textContent = txt; return s; };
+  btn.appendChild(mk('mb-icon', '▶'));
+  btn.appendChild(mk('mb-label', `RESUME: ${g.opponent || 'game'}`));
+  btn.appendChild(mk('mb-sub', `${g.date} · ${(g.pitches && g.pitches.length) || 0} pitches · pick up where you left off`));
+  el.innerHTML = '';
+  el.appendChild(btn);
+  el.classList.remove('hidden');
+}
 
 // ── Lineup entry (setup) ────────────────────────────────────────────────────
 function toggleLineupEntry() {
@@ -1291,6 +1370,7 @@ function startGame() {
   showMain();
   updateUI();
   autoSave();
+  clearSetupDraft();   // game is now saved as a real game; drop the setup draft
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2499,6 +2579,13 @@ async function resumeSession(sessionId) {
     opt.value = v; opt.textContent = v;
     if (v === 85) opt.selected = true;
     svs.appendChild(opt);
+  }
+
+  // Persist the setup form as it's filled in, so lineups survive an app reload
+  const _setupEl = document.getElementById('setup-screen');
+  if (_setupEl) {
+    _setupEl.addEventListener('input',  saveSetupDraft);
+    _setupEl.addEventListener('change', saveSetupDraft);
   }
 
   updatePitcherDatalist();
