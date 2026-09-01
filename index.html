@@ -94,6 +94,18 @@ select option { background: var(--card); }
 .sb-val   { font-size: 1.5rem; font-weight: 800; color: var(--orange); line-height: 1.1; }
 .sb-val.danger { color: var(--red); }
 .count-display { font-size: 1.4rem; font-weight: 700; color: var(--white); }
+#scorebug {
+  display: flex; align-items: center; justify-content: center; gap: 16px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  margin: 8px 12px 0; padding: 7px 12px;
+}
+.sbug-side { display: inline-flex; align-items: center; gap: 8px; opacity: 0.5; }
+.sbug-side.batting { opacity: 1; }
+.sbug-name  { font-size: 0.95rem; font-weight: 700; color: var(--light); letter-spacing: 0.5px; }
+.sbug-side.batting .sbug-name { color: var(--white); }
+.sbug-runs  { font-size: 1.6rem; font-weight: 800; color: var(--orange); min-width: 22px; text-align: center; }
+.sbug-arrow { font-size: 0.8rem; color: var(--orange); }
+.sbug-dash  { color: var(--light); font-weight: 700; }
 
 /* ── DIAMOND ────────────────────────────────────────────────────────────── */
 .diamond-wrap { display: flex; flex-direction: column; align-items: center; padding: 4px; }
@@ -538,6 +550,21 @@ select option { background: var(--card); }
     </div>
   </div>
 
+  <!-- SCOREBUG (full-game / lineup mode) -->
+  <div id="scorebug" class="hidden">
+    <span class="sbug-side" id="sbug-away">
+      <span class="sbug-arrow" id="sbug-away-arrow">▲</span>
+      <span class="sbug-name" id="sbug-away-name">AWAY</span>
+      <span class="sbug-runs" id="sbug-away-runs">0</span>
+    </span>
+    <span class="sbug-dash">—</span>
+    <span class="sbug-side" id="sbug-home">
+      <span class="sbug-runs" id="sbug-home-runs">0</span>
+      <span class="sbug-name" id="sbug-home-name">HOME</span>
+      <span class="sbug-arrow" id="sbug-home-arrow">▼</span>
+    </span>
+  </div>
+
   <!-- SCOREBOARD -->
   <div id="scoreboard">
     <div class="sb-cell">
@@ -947,6 +974,9 @@ function newGameState() {
     twoStrikeCountWasZeroTwo: false,
     // Run tracking
     runsAllowed: 0,
+    awayRuns: 0,                 // scorebug: runs by the team batting the tops
+    homeRuns: 0,                 // scorebug: runs by the team batting the bottoms
+    undoStack: [],               // per-pitch state snapshots for a clean Undo
     // ── Full-game / lineup mode (optional) ──────────────────────────────
     lineupMode: false,           // true once lineups are entered at setup
     // inning counts half-innings (1=top1, 2=bot1, 3=top2 ...); derive half/real:
@@ -1469,8 +1499,18 @@ function clearZoneVel() {
   if (vs) vs.value = '';
 }
 
+// Credit runs to the batting team's scorebug and the running total.
+function scoreRuns(n) {
+  if (!n) return;
+  state.runsAllowed = (state.runsAllowed || 0) + n;
+  if (state.lineupMode) {
+    if (curHalf() === 'top') state.awayRuns = (state.awayRuns || 0) + n;
+    else                     state.homeRuns = (state.homeRuns || 0) + n;
+  }
+}
+
 function addRun() {
-  state.runsAllowed = (state.runsAllowed || 0) + 1;
+  scoreRuns(1);
   updateUI();
   autoSave();
 }
@@ -1525,6 +1565,10 @@ function logPitch() {
   if (state.selResult === 'In Play' && !state.selOutcome) { alert('Select PA outcome.'); return; }
 
   // velocity is already tracked in state via adjustVel()
+
+  // Snapshot the full pre-pitch state so Undo can restore it exactly — count,
+  // pitcher, batter, order position, runners, outs, score and all.
+  pushUndoSnapshot();
 
   state.pitchNumGame++;
   state.pitchNumPA++;
@@ -1636,7 +1680,7 @@ function logPitch() {
       const irs  = Math.min(runnersOn, state.remainingInherited);
       state.inheritedRunsScored += irs;
       state.remainingInherited   = 0;
-      state.runsAllowed = (state.runsAllowed || 0) + runs;
+      scoreRuns(runs);
       state.runners = [false, false, false];
       pitch.inherited_runs_scored = irs;
       pitch.runs_allowed = runs;
@@ -1676,10 +1720,23 @@ function logPitch() {
     _paFlash = { outcome: 'HBP', count: state.pitchNumPA };
     endPA();
   } else if (result === 'WP' || result === 'PB') {
-    // Pitch recorded, PA continues. If runners are on, prompt to advance them
-    // (a WP/PB usually moves runners up; a runner on 3rd typically scores).
-    pitch.pa_outcome = null;
+    // A wild pitch / passed ball counts as a ball in the count. On ball four the
+    // batter walks; otherwise the PA continues. Runners usually advance.
+    state.balls++;
     const prevRunners = [...state.runners];
+    if (state.balls >= 4) {
+      pitch.pa_outcome = 'BB';
+      const bbAdv = advanceRunners('BB');   // forces runners; folds in the WP
+      pitch.inherited_runs_scored = bbAdv.irs;
+      pitch.runs_allowed = bbAdv.runs;
+      _paFlash = { outcome: 'BB', count: state.pitchNumPA };
+      state.pitches.push(pitch);
+      autoSave();
+      if (state.outs >= 3) endInning(); else endPA();
+      updateUI(); autoSave();
+      return;
+    }
+    pitch.pa_outcome = null;
     if (prevRunners.some(Boolean)) {
       state.pitches.push(pitch);
       autoSave();
@@ -1865,7 +1922,7 @@ function advanceRunners(outcome) {
   }
 
   state.runners = r;
-  state.runsAllowed = (state.runsAllowed || 0) + runs;
+  scoreRuns(runs);
   return { irs, runs };
 }
 
@@ -1961,7 +2018,7 @@ function confirmRunnerModal() {
     state.pitches[state.pitches.length - 1].inherited_runs_scored = irs;
     state.pitches[state.pitches.length - 1].runs_allowed = _runnerModalRuns;
   }
-  state.runsAllowed = (state.runsAllowed || 0) + _runnerModalRuns;
+  scoreRuns(_runnerModalRuns);
   if (_runnerModalCallback) { _runnerModalCallback(); _runnerModalCallback = null; }
 }
 
@@ -2005,53 +2062,77 @@ function logSB(success) {
 //  UNDO
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Save a full snapshot of the reversible game state before a pitch is logged.
+function pushUndoSnapshot() {
+  if (!state.undoStack) state.undoStack = [];
+  state.undoStack.push({
+    balls: state.balls, strikes: state.strikes, outs: state.outs,
+    inning: state.inning, paId: state.paId,
+    pitchNumPA: state.pitchNumPA, pitchNumGame: state.pitchNumGame,
+    pitcherPitchCount: state.pitcherPitchCount,
+    runners: [...state.runners],
+    isLeadoff: state.isLeadoff, batterHand: state.batterHand,
+    pitcher: state.pitcher ? { ...state.pitcher } : null,
+    pitcherHand: state.pitcherHand,
+    inheritedRunners: state.inheritedRunners,
+    inheritedRunsScored: state.inheritedRunsScored,
+    remainingInherited: state.remainingInherited,
+    runsAllowed: state.runsAllowed, awayRuns: state.awayRuns, homeRuns: state.homeRuns,
+    twoStrikeReachedThisPA: state.twoStrikeReachedThisPA,
+    twoStrikeCountWasZeroTwo: state.twoStrikeCountWasZeroTwo,
+    lastVelo: state.lastVelo,
+    awayPos: state.awayTeam ? state.awayTeam.pos : 0,
+    homePos: state.homeTeam ? state.homeTeam.pos : 0,
+    homePitcher: state.homePitcher ? { ...state.homePitcher } : null,
+    awayPitcher: state.awayPitcher ? { ...state.awayPitcher } : null,
+    pitchCount: state.pitches.length,
+  });
+  if (state.undoStack.length > 50) state.undoStack.shift();
+}
+
+// Undo reverts ONLY the last pitch: it restores the exact state from before that
+// pitch (count, pitcher, batter, order spot, runners, outs, score) — it never
+// touches the lineups, the pitcher, or anything else.
 function undoLastPitch() {
-  if (state.pitches.length === 0) return;
-  state.pitches.pop();
-  state.pitchNumGame = Math.max(0, state.pitchNumGame - 1);
-  state.pitcherPitchCount = Math.max(0, state.pitcherPitchCount - 1);
-
-  // Rebuild state from scratch (simple approach)
-  const gid  = state.gameId;
-  const opp  = state.opponent;
-  const dt   = state.date;
-  const loc  = state.location;
-  const pits = [...state.pitches];
-  const pit  = state.pitcher;
-
-  state = newGameState();
-  state.gameId   = gid;
-  state.opponent = opp;
-  state.date     = dt;
-  state.location = loc;
-  state.pitcher  = pit;
-  state.pitches  = pits;
-  state.pitchNumGame = pits.length;
-
-  // Reconstruct from last pitch
-  if (pits.length > 0) {
-    const lp = pits[pits.length - 1];
-    state.inning  = lp.inning;
-    state.paId    = lp.pa_id;
-    state.pitcher = { name: lp.pitcher };
-    if (lp.pa_outcome) {
-      // Last pitch ended a PA, need next state
-      const isOut = ['K','out','FC','SAC'].includes(lp.pa_outcome);
-      state.outs = lp.outs + (isOut ? 1 : 0);
-      if (state.outs >= 3) { state.outs = 0; state.inning = lp.inning + 1; }
-      state.balls   = 0;
-      state.strikes = 0;
-      state.paId    = lp.pa_id + 1;
-      state.pitchNumPA = 0;
-    } else {
-      state.balls      = lp.balls;
-      state.strikes    = lp.strikes;
-      state.outs       = lp.outs;
-      state.paId       = lp.pa_id;
-      state.pitchNumPA = lp.pitch_num_pa;
-    }
+  const stack = state.undoStack;
+  if (stack && stack.length) {
+    const s = stack.pop();
+    state.pitches.length = s.pitchCount;      // drop the pitch (and any after)
+    state.balls = s.balls; state.strikes = s.strikes; state.outs = s.outs;
+    state.inning = s.inning; state.paId = s.paId;
+    state.pitchNumPA = s.pitchNumPA; state.pitchNumGame = s.pitchNumGame;
+    state.pitcherPitchCount = s.pitcherPitchCount;
+    state.runners = [...s.runners];
+    state.isLeadoff = s.isLeadoff;
+    state.pitcher = s.pitcher ? { ...s.pitcher } : null;
+    state.pitcherHand = s.pitcherHand;
+    state.inheritedRunners = s.inheritedRunners;
+    state.inheritedRunsScored = s.inheritedRunsScored;
+    state.remainingInherited = s.remainingInherited;
+    state.runsAllowed = s.runsAllowed;
+    state.awayRuns = s.awayRuns; state.homeRuns = s.homeRuns;
+    state.twoStrikeReachedThisPA = s.twoStrikeReachedThisPA;
+    state.twoStrikeCountWasZeroTwo = s.twoStrikeCountWasZeroTwo;
+    state.lastVelo = s.lastVelo;
+    state.homePitcher = s.homePitcher ? { ...s.homePitcher } : null;
+    state.awayPitcher = s.awayPitcher ? { ...s.awayPitcher } : null;
+    if (state.awayTeam) state.awayTeam.pos = s.awayPos;
+    if (state.homeTeam) state.homeTeam.pos = s.homePos;
+    if (state.lineupMode) setCurrentBatter();   // re-derive batter from the spot
+    state.batterHand = s.batterHand;            // keep the exact hand (switch hitters)
+  } else if (state.pitches.length > 0) {
+    // Fallback for a game started before this update (no snapshot). Pop the pitch
+    // and revert the count from the previous one — WITHOUT wiping lineup state.
+    state.pitches.pop();
+    state.pitchNumGame = Math.max(0, state.pitchNumGame - 1);
+    state.pitcherPitchCount = Math.max(0, state.pitcherPitchCount - 1);
+    const lp = state.pitches[state.pitches.length - 1];
+    if (lp && !lp.pa_outcome) { state.balls = lp.balls; state.strikes = lp.strikes; }
+    else { state.balls = 0; state.strikes = 0; }
+  } else {
+    return;
   }
-
+  clearSelections();
   autoSave();
   updateUI();
 }
@@ -2199,6 +2280,7 @@ function autoSave() {
       inheritedRunners: state.inheritedRunners, inheritedRunsScored: state.inheritedRunsScored,
       remainingInherited: state.remainingInherited, batterHand: state.batterHand,
       runsAllowed: state.runsAllowed, lastVelo: state.lastVelo,
+      awayRuns: state.awayRuns, homeRuns: state.homeRuns, undoStack: state.undoStack,
       twoStrikeReachedThisPA: state.twoStrikeReachedThisPA,
       twoStrikeCountWasZeroTwo: state.twoStrikeCountWasZeroTwo,
       lineupMode: state.lineupMode,
@@ -2277,6 +2359,23 @@ function updateUI() {
   document.getElementById('sb-runs').textContent    = state.runsAllowed || 0;
   document.getElementById('sb-count').textContent   = `${state.balls}-${state.strikes}`;
   document.getElementById('sb-pitches').textContent = state.pitcherPitchCount;
+
+  // Scorebug (full-game / lineup mode): both team scores, batting team lit up
+  const sbug = document.getElementById('scorebug');
+  if (state.lineupMode && state.awayTeam && state.homeTeam) {
+    const top = curHalf() === 'top';
+    document.getElementById('sbug-away-name').textContent = (state.awayTeam.name || 'Away').toUpperCase();
+    document.getElementById('sbug-home-name').textContent = (state.homeTeam.name || 'Home').toUpperCase();
+    document.getElementById('sbug-away-runs').textContent = state.awayRuns || 0;
+    document.getElementById('sbug-home-runs').textContent = state.homeRuns || 0;
+    document.getElementById('sbug-away').classList.toggle('batting', top);
+    document.getElementById('sbug-home').classList.toggle('batting', !top);
+    document.getElementById('sbug-away-arrow').style.visibility = top ? 'visible' : 'hidden';
+    document.getElementById('sbug-home-arrow').style.visibility = top ? 'hidden' : 'visible';
+    sbug.classList.remove('hidden');
+  } else {
+    sbug.classList.add('hidden');
+  }
 
   // Diamond
   document.getElementById('base-1b').className = 'base' + (state.runners[0] ? ' on' : '');
