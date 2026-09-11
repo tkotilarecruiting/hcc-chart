@@ -690,7 +690,7 @@ select option { background: var(--card); }
       <button class="btn btn-red btn-sm" onclick="setResult('HBP')">HBP</button>
       <button class="btn btn-dark btn-sm" onclick="setResult('WP')">WP</button>
       <button class="btn btn-dark btn-sm" onclick="setResult('PB')">PB</button>
-      <button class="btn btn-orange btn-sm" onclick="setResult('K-Reach')">K⇢Reach</button>
+      <button class="btn btn-orange btn-sm" onclick="setResult('K-Reach')">Drop 3rd (K-Reach)</button>
     </div>
   </div>
 
@@ -1525,7 +1525,7 @@ function setResult(result) {
     b.classList.toggle('selected', b.textContent.trim() === result ||
       (result === 'Called Strike' && b.textContent.trim() === 'K-Called') ||
       (result === 'Swing Strike'  && b.textContent.trim() === 'K-Swing') ||
-      (result === 'K-Reach'       && b.textContent.trim() === 'K⇢Reach'));
+      (result === 'K-Reach'       && b.textContent.trim() === 'Drop 3rd (K-Reach)'));
   });
   // Show/hide contact section
   const inPlay = (result === 'In Play');

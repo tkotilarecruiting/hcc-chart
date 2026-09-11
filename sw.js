@@ -9,7 +9,7 @@
 //   • Static files are cache-first so they load offline too.
 //
 // The cache version is bumped automatically on each deploy (deploy_chart.py).
-const CACHE = "hcc-chart-v12";
+const CACHE = "hcc-chart-v13";
 const SHELL = ["./index.html", "./manifest.json"];
 
 self.addEventListener("install", (e) => {
